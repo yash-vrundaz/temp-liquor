@@ -12,12 +12,17 @@ export type SessionPayload = {
   role: UserRole;
 };
 
+const MIN_SECRET_LENGTH = 16;
+
 function secretKey() {
-  const secret =
-    process.env.AUTH_SECRET ||
-    (process.env.NODE_ENV === "production" ? "" : "liquor-shop-dev-auth-secret-2026");
-  if (!secret) {
-    throw new Error("AUTH_SECRET is not set.");
+  const secret = process.env.AUTH_SECRET ?? "";
+  if (secret.length < MIN_SECRET_LENGTH) {
+    // No committed fallback: a hardcoded secret in a public repo lets anyone
+    // forge a valid session cookie. AUTH_SECRET must be set in every
+    // environment, including local development (see .env.example).
+    throw new Error(
+      `AUTH_SECRET must be set to at least ${MIN_SECRET_LENGTH} characters.`,
+    );
   }
   return new TextEncoder().encode(secret);
 }

@@ -44,7 +44,6 @@ export const bottleFieldsSchema = z.object({
 export const newBottleSchema = bottleFieldsSchema.extend({
   initialStock: z.number().int().min(0).default(0),
   stockLocationIds: z.array(z.string().min(1)).optional(),
-  actorUserId: z.string().min(1).optional(),
 });
 
 export const patchBottleSchema = z.object({
@@ -144,24 +143,10 @@ export const patchUserSchema = z.object({
   allowedLocationIds: z.array(z.string().min(1)).nullable().optional(),
 });
 
-export const profilePatchSchema = z.union([
-  z.object({
-    userId: z.string().min(1),
-    patch: z.object({
-      preferredBranchId: z.string().min(1).optional(),
-      recentlyViewed: z.array(z.string()).max(12).optional(),
-      addresses: z.array(addressSchema).optional(),
-    }),
-  }),
-  z.object({
-    userId: z.string().min(1),
-    redeemPoints: z.number().int().positive(),
-  }),
-]);
-
 export const placeOrderSchema = z.object({
   email: z.string().email(),
   name: z.string().trim().min(2).max(120),
+  // Ignored by the server: the customer is resolved from the session or email.
   userId: z.string().min(1).optional(),
   locationId: z.string().min(1),
   fulfillment: z.enum(["delivery", "pickup"]),
@@ -177,14 +162,14 @@ export const placeOrderSchema = z.object({
 });
 
 export const cancelOrderSchema = z.object({
-  userId: z.string().min(1),
+  // Ignored by the server: cancellation is scoped to the signed-in user.
+  userId: z.string().min(1).optional(),
   orderId: z.string().min(1),
 });
 
 export const bookSeatsSchema = z.object({
   eventId: z.string().min(1),
   qty: z.number().int().positive().max(12),
-  actorUserId: z.string().min(1).optional(),
 });
 
 export const inventoryPatchSchema = z.discriminatedUnion("action", [
@@ -194,7 +179,6 @@ export const inventoryPatchSchema = z.discriminatedUnion("action", [
     productId: z.string().min(1),
     quantity: z.number().int().min(0),
     reason: z.string().max(40).optional(),
-    actorUserId: z.string().min(1).optional(),
   }),
   z.object({
     action: z.literal("adjust"),
@@ -203,7 +187,6 @@ export const inventoryPatchSchema = z.discriminatedUnion("action", [
     delta: z.number().int(),
     reason: z.string().max(40).optional(),
     orderId: z.string().optional(),
-    actorUserId: z.string().min(1).optional(),
   }),
   z.object({
     action: z.literal("deduct"),
@@ -217,12 +200,10 @@ export const inventoryPatchSchema = z.discriminatedUnion("action", [
         }),
       )
       .min(1),
-    actorUserId: z.string().min(1).optional(),
   }),
   z.object({
     action: z.literal("reset"),
     locationId: z.string().min(1).optional(),
-    actorUserId: z.string().min(1).optional(),
   }),
 ]);
 
