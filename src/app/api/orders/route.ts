@@ -1,0 +1,51 @@
+import { NextResponse } from "next/server";
+import { cancelOrder, fetchInventoryState, placeOrder, StockConflictError } from "@/lib/db/queries";
+import { cancelOrderSchema, placeOrderSchema } from "@/lib/db/validators";
+import { getRequestUser } from "@/lib/auth/require";
+
+export async function POST(request: Request) {
+  try {
+    const parsed = placeOrderSchema.safeParse(await request.json());
+    if (!parsed.success) {
+      return NextResponse.json({ error: "Invalid order payload." }, { status: 400 });
+    }
+    const actor = await getRequestUser();
+    const result = await placeOrder({
+      ...parsed.data,
+      userId: actor?.id ?? parsed.data.userId,
+    });
+    const inventory = await fetchInventoryState();
+    return NextResponse.json({ ...result, inventory }, { status: 201 });
+  } catch (error) {
+    if (error instanceof StockConflictError) {
+      return NextResponse.json(
+        { error: error.message, shortfalls: error.shortfalls },
+        { status: 409 },
+      );
+    }
+    console.error("[POST /api/orders]", error);
+    return NextResponse.json({ error: "Failed to create order." }, { status: 500 });
+  }
+}
+
+export async function PATCH(request: Request) {
+  try {
+    const parsed = cancelOrderSchema.safeParse(await request.json());
+    if (!parsed.success) {
+      return NextResponse.json({ error: "Invalid cancel payload." }, { status: 400 });
+    }
+    const actor = await getRequestUser();
+    const order = await cancelOrder(
+      parsed.data.orderId,
+      actor?.id ?? parsed.data.userId,
+    );
+    if (!order) {
+      return NextResponse.json({ error: "Order not found or already cancelled." }, { status: 404 });
+    }
+    const inventory = await fetchInventoryState();
+    return NextResponse.json({ order, inventory });
+  } catch (error) {
+    console.error("[PATCH /api/orders]", error);
+    return NextResponse.json({ error: "Failed to cancel order." }, { status: 500 });
+  }
+}

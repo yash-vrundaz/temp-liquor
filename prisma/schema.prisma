@@ -1,0 +1,256 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+model Category {
+  slug        String    @id
+  name        String
+  tagline     String
+  description String
+  color       String
+  products    Product[]
+
+  @@map("categories")
+}
+
+model Product {
+  id             String   @id
+  slug           String   @unique
+  name           String
+  brand          String
+  categorySlug   String   @map("category_slug")
+  subcategory    String?
+  description    String   @db.Text
+  brandStory     String   @map("brand_story") @db.Text
+  origin         String
+  country        String
+  abv            Float
+  volumeMl       Int      @map("volume_ml")
+  price          Float
+  compareAtPrice Float?   @map("compare_at_price")
+  rating         Float
+  reviewCount    Int      @map("review_count")
+  tastingNotes   Json     @map("tasting_notes")
+  foodPairings   Json     @map("food_pairings")
+  cocktails      Json
+  images         Json
+  color          String
+  accentColor    String   @map("accent_color")
+  labelColor     String   @map("label_color")
+  bottleHeight   Float    @map("bottle_height")
+  isPremium      Boolean  @map("is_premium")
+  isImported     Boolean  @map("is_imported")
+  tags           Json
+  nutrition      Json?
+  glbUrl         String?  @map("glb_url")
+  usdzUrl        String?  @map("usdz_url")
+  isCustom       Boolean  @default(false) @map("is_custom")
+  createdAt      DateTime @default(now()) @map("created_at")
+  updatedAt      DateTime @default(now()) @updatedAt @map("updated_at")
+
+  category   Category            @relation(fields: [categorySlug], references: [slug])
+  inventory  LocationInventory[]
+  reviews    Review[]
+  orderItems OrderItem[]
+
+  @@index([categorySlug])
+  @@index([brand])
+  @@map("products")
+}
+
+model Location {
+  id               String   @id
+  slug             String   @unique
+  name             String
+  shortName        String   @map("short_name")
+  address          String
+  city             String
+  state            String
+  zip              String
+  phone            String
+  email            String
+  hours            Json
+  lat              Float
+  lng              Float
+  heroImage        String   @map("hero_image")
+  gallery          Json
+  staff            Json
+  services         Json
+  parking          String
+  pickupAvailable  Boolean  @map("pickup_available")
+  deliveryRadiusKm Float    @map("delivery_radius_km")
+  featuredOffers   Json     @map("featured_offers")
+  description      String   @db.Text
+
+  inventory LocationInventory[]
+  events    Event[]
+  orders    Order[]
+
+  @@map("locations")
+}
+
+model LocationInventory {
+  locationId String  @map("location_id")
+  productId  String  @map("product_id")
+  seedStock  Int     @map("seed_stock")
+  onHand     Int     @map("on_hand")
+  promoPrice Float?  @map("promo_price")
+  featured   Boolean @default(false)
+
+  location Location @relation(fields: [locationId], references: [id], onDelete: Cascade)
+  product  Product  @relation(fields: [productId], references: [id], onDelete: Cascade)
+
+  @@id([locationId, productId])
+  @@index([productId])
+  @@map("location_inventory")
+}
+
+model Event {
+  id             String @id
+  slug           String @unique
+  title          String
+  type           String
+  description    String @db.Text
+  locationId     String @map("location_id")
+  date           String
+  startTime      String @map("start_time")
+  endTime        String @map("end_time")
+  price          Float
+  seatsTotal     Int    @map("seats_total")
+  seatsAvailable Int    @map("seats_available")
+  image          String
+  hosts          Json
+
+  location Location @relation(fields: [locationId], references: [id], onDelete: Cascade)
+
+  @@index([locationId])
+  @@map("events")
+}
+
+model Review {
+  id        String  @id
+  productId String  @map("product_id")
+  userName  String  @map("user_name")
+  rating    Int
+  title     String
+  body      String  @db.Text
+  date      String
+  verified  Boolean
+  images    Json?
+  helpful   Int
+
+  product Product @relation(fields: [productId], references: [id], onDelete: Cascade)
+
+  @@index([productId])
+  @@map("reviews")
+}
+
+model User {
+  id                String   @id
+  email             String   @unique
+  name              String
+  role              String
+  passwordHash      String?  @map("password_hash")
+  active            Boolean  @default(true)
+  preferredBranchId String   @map("preferred_branch_id")
+  loyaltyPoints     Int      @map("loyalty_points")
+  loyaltyTier       String   @map("loyalty_tier")
+  addresses         Json
+  recentlyViewed    Json     @map("recently_viewed")
+  avatarUrl         String?  @map("avatar_url") @db.Text
+  permissionGrants  Json     @default("[]") @map("permission_grants")
+  permissionRevokes Json     @default("[]") @map("permission_revokes")
+  allowedLocationIds Json?    @map("allowed_location_ids")
+  createdAt         DateTime @default(now()) @map("created_at")
+  updatedAt         DateTime @default(now()) @updatedAt @map("updated_at")
+
+  orders     Order[]
+  activities ActivityLog[]
+
+  @@index([role])
+  @@index([active])
+  @@map("users")
+}
+
+model Order {
+  id          String  @id
+  userId      String  @map("user_id")
+  date        String
+  status      String
+  total       Float
+  fulfillment String
+  locationId  String  @map("location_id")
+  tracking    String?
+  createdAt   DateTime @default(now()) @map("created_at")
+
+  user     User              @relation(fields: [userId], references: [id])
+  location Location          @relation(fields: [locationId], references: [id])
+  items    OrderItem[]
+  ledger   InventoryLedger[]
+
+  @@index([userId])
+  @@index([locationId])
+  @@index([date])
+  @@map("orders")
+}
+
+model OrderItem {
+  id        String @id @default(cuid())
+  orderId   String @map("order_id")
+  productId String @map("product_id")
+  quantity  Int
+  price     Float
+
+  order   Order   @relation(fields: [orderId], references: [id], onDelete: Cascade)
+  product Product @relation(fields: [productId], references: [id])
+
+  @@index([orderId])
+  @@index([productId])
+  @@map("order_items")
+}
+
+model InventoryLedger {
+  id          String   @id @default(cuid())
+  locationId  String   @map("location_id")
+  productId   String   @map("product_id")
+  delta       Int
+  onHandAfter Int      @map("on_hand_after")
+  reason      String
+  orderId     String?  @map("order_id")
+  createdAt   DateTime @default(now()) @map("created_at")
+
+  order Order? @relation(fields: [orderId], references: [id])
+
+  @@index([locationId, productId])
+  @@index([orderId])
+  @@index([createdAt])
+  @@map("inventory_ledger")
+}
+
+model ActivityLog {
+  id          String   @id @default(cuid())
+  actorUserId String?  @map("actor_user_id")
+  actorName   String   @map("actor_name")
+  actorEmail  String?  @map("actor_email")
+  actorRole   String   @map("actor_role")
+  action      String
+  entityType  String   @map("entity_type")
+  entityId    String?  @map("entity_id")
+  summary     String
+  metadata    Json?
+  locationId  String?  @map("location_id")
+  createdAt   DateTime @default(now()) @map("created_at")
+
+  actor User? @relation(fields: [actorUserId], references: [id], onDelete: SetNull)
+
+  @@index([createdAt])
+  @@index([actorUserId])
+  @@index([action])
+  @@index([entityType, entityId])
+  @@map("activity_logs")
+}
