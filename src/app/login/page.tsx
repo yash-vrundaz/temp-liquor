@@ -86,11 +86,6 @@ function LoginForm() {
           Create an account
         </Link>
       </p>
-      <p className="mt-4 text-[11px] leading-relaxed text-muted">
-        Demo: owner@samsdiscountliquor.com, admin@samsdiscountliquor.com,
-        staff@samsdiscountliquor.com, alex.reed@email.com — password{" "}
-        <span className="text-cream">Liquor123!</span>
-      </p>
     </AuthCard>
   );
 }
