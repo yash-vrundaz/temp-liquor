@@ -4,7 +4,7 @@ import { mapUser } from "@/lib/db/mappers";
 import { mapOrder } from "@/lib/db/mappers";
 import { recordActivity } from "@/lib/db/activity";
 import { hashPassword, validatePassword, verifyPassword } from "@/lib/auth/password";
-import { canAssignRole, canDeactivateUser, canEditUser, canResetPassword, DEMO_PASSWORD, isDemoAccountEmail, isUserRole } from "@/lib/auth/roles";
+import { canAssignRole, canDeactivateUser, canEditUser, canResetPassword, isDemoAccountEmail, isUserRole } from "@/lib/auth/roles";
 import {
   hasPermission,
   normalizeOverrides,
@@ -28,24 +28,10 @@ function userInclude() {
   };
 }
 
-let extraColumnsReady = false;
-
-async function ensureUserColumns() {
-  if (extraColumnsReady) return;
-  await prisma.$executeRawUnsafe(
-    `ALTER TABLE users ADD COLUMN IF NOT EXISTS avatar_url TEXT`,
-  );
-  await prisma.$executeRawUnsafe(
-    `ALTER TABLE users ADD COLUMN IF NOT EXISTS permission_grants JSONB NOT NULL DEFAULT '[]'::jsonb`,
-  );
-  await prisma.$executeRawUnsafe(
-    `ALTER TABLE users ADD COLUMN IF NOT EXISTS permission_revokes JSONB NOT NULL DEFAULT '[]'::jsonb`,
-  );
-  await prisma.$executeRawUnsafe(
-    `ALTER TABLE users ADD COLUMN IF NOT EXISTS allowed_location_ids JSONB`,
-  );
-  extraColumnsReady = true;
-}
+// The avatar_url, permission_grants, permission_revokes and allowed_location_ids
+// columns are declared in prisma/schema.prisma and created by `prisma db push`
+// / migrations. The app must not mutate its own schema at runtime, so there is
+// deliberately no ensureUserColumns() bootstrap here.
 
 function asAvatarUrl(value: string | null | undefined) {
   const trimmed = value?.trim() ?? "";
@@ -54,7 +40,6 @@ function asAvatarUrl(value: string | null | undefined) {
 
 export async function attachProfileExtras(user: UserProfile): Promise<UserProfile> {
   if (!isDbConfigured()) return user;
-  await ensureUserColumns();
   const rows = await prisma.$queryRaw<
     Array<{
       avatar_url: string | null;
@@ -124,14 +109,12 @@ export async function authenticateUser(
   if (!auth) return { error: "Invalid email or password.", status: 401 };
   if (auth.active === false) return { error: "This account is deactivated.", status: 403 };
 
-  let hash = auth.password_hash;
-  if (!hash && isDemoAccountEmail(normalized)) {
-    hash = await hashPassword(DEMO_PASSWORD);
-    await prisma.$executeRaw`
-      UPDATE users SET password_hash = ${hash}, active = true WHERE id = ${auth.id}
-    `;
-  }
+  const hash = auth.password_hash;
   if (!hash) {
+    // Do NOT silently re-provision a known demo password here: that would
+    // recreate a public, documented credential every time someone tried to
+    // sign in, defeating any password rotation. Demo accounts get their
+    // password from the seed only.
     return {
       error: "This email has no password yet. Create one with Sign up.",
       status: 400,
@@ -288,7 +271,6 @@ function samePermissionList(a: readonly Permission[], b: readonly Permission[]) 
 }
 
 async function fetchManagedById(id: string) {
-  await ensureUserColumns();
   const rows = await prisma.$queryRaw<SqlUserRow[]>`
     SELECT
       u.id,
@@ -347,7 +329,6 @@ export async function listManagedUsers(filters: {
   sortDir?: "asc" | "desc";
 }) {
   if (!isDbConfigured()) return { users: [] as ManagedUser[], total: 0 };
-  await ensureUserColumns();
 
   const limit = Math.min(50, Math.max(1, filters.limit ?? 10));
   const offset = Math.max(0, filters.offset ?? 0);
@@ -435,7 +416,6 @@ export async function createManagedUser(
   const passwordError = validatePassword(input.password);
   if (passwordError) return { error: passwordError, status: 400 };
   if (!isDbConfigured()) return { error: "Database is not configured.", status: 503 };
-  await ensureUserColumns();
 
   const email = input.email.trim().toLowerCase();
   if (await emailTaken(email)) return { error: "That email is already in use.", status: 409 };
@@ -448,7 +428,8 @@ export async function createManagedUser(
   const revokesJson = JSON.stringify(overrides.permissionRevokes);
   const knownIds = await listLocationIds();
   const allowed = sanitizeAssignedLocations(actor, input.role, input.allowedLocationIds, knownIds);
-  const allowedJson = allowed ? JSON.stringify(allowed) : null;
+  if (!allowed.ok) return { error: allowed.error, status: 403 };
+  const allowedJson = allowed.ids ? JSON.stringify(allowed.ids) : null;
   await prisma.user.create({
     data: {
       id,
@@ -510,7 +491,6 @@ export async function patchManagedUser(
   },
 ): Promise<{ user: ManagedUser; error?: undefined } | { user?: undefined; error: string; status: number }> {
   if (!isDbConfigured()) return { error: "Database is not configured.", status: 503 };
-  await ensureUserColumns();
 
   const existingRows = await prisma.$queryRaw<
     Array<{
@@ -671,7 +651,8 @@ export async function patchManagedUser(
       nextRole === "owner" || nextRole === "customer" ? null : input.allowedLocationIds,
       knownIds,
     );
-    const allowedJson = allowed ? JSON.stringify(allowed) : null;
+    if (!allowed.ok) return { error: allowed.error, status: 403 };
+    const allowedJson = allowed.ids ? JSON.stringify(allowed.ids) : null;
     await prisma.$executeRaw`
       UPDATE users
       SET allowed_location_ids = ${allowedJson}::jsonb
@@ -750,7 +731,6 @@ export async function updateOwnProfileFields(
   patch: { name?: string; email?: string; avatarUrl?: string | null },
 ): Promise<{ error?: string; status?: number }> {
   if (!isDbConfigured()) return { error: "Database is not configured.", status: 503 };
-  await ensureUserColumns();
 
   const existing = await prisma.$queryRaw<Array<{ id: string; email: string }>>`
     SELECT id, email FROM users WHERE id = ${userId} LIMIT 1

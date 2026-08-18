@@ -3,6 +3,7 @@ import { bookEventSeats, fetchEventBySlug, fetchEvents, fetchInventoryState } fr
 import { bookSeatsSchema, eventPatchSchema, eventWriteSchema } from "@/lib/db/validators";
 import { getRequestUser, requirePermission } from "@/lib/auth/require";
 import { createStoreEvent, deleteStoreEvent, updateStoreEvent } from "@/lib/db/store-admin";
+import { clientIp, rateLimit, tooManyRequests } from "@/lib/rate-limit";
 
 export async function GET(request: Request) {
   try {
@@ -25,16 +26,18 @@ export async function GET(request: Request) {
 
 export async function POST(request: Request) {
   try {
+    const limit = rateLimit(`book:ip:${clientIp(request)}`, { limit: 20, windowMs: 60_000 });
+    if (!limit.ok) {
+      return tooManyRequests(limit.retryAfter);
+    }
     const parsed = bookSeatsSchema.safeParse(await request.json());
     if (!parsed.success) {
       return NextResponse.json({ error: "Invalid booking payload." }, { status: 400 });
     }
     const actor = await getRequestUser();
-    const ok = await bookEventSeats(
-      parsed.data.eventId,
-      parsed.data.qty,
-      actor?.id ?? parsed.data.actorUserId,
-    );
+    // Attribute the booking to the session only; a body-supplied actorUserId
+    // would let a guest forge who booked in the audit log.
+    const ok = await bookEventSeats(parsed.data.eventId, parsed.data.qty, actor?.id);
     if (!ok) {
       return NextResponse.json({ error: "Not enough seats available." }, { status: 409 });
     }

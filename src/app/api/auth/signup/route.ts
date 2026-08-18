@@ -3,9 +3,14 @@ import { signupCustomer } from "@/lib/db/users";
 import { signupSchema } from "@/lib/db/validators";
 import { writeSessionCookie } from "@/lib/auth/session";
 import { validatePassword } from "@/lib/auth/password";
+import { clientIp, rateLimit, tooManyRequests } from "@/lib/rate-limit";
 
 export async function POST(request: Request) {
   try {
+    const limit = rateLimit(`signup:ip:${clientIp(request)}`, { limit: 5, windowMs: 60 * 60_000 });
+    if (!limit.ok) {
+      return tooManyRequests(limit.retryAfter, "Too many sign-up attempts. Try again later.");
+    }
     const parsed = signupSchema.safeParse(await request.json());
     if (!parsed.success) {
       return NextResponse.json({ error: "Name, email, and password are required." }, { status: 400 });
