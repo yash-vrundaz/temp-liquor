@@ -98,7 +98,7 @@ export function MobileSortBar<K extends string>({
   className?: string;
 }) {
   return (
-    <div className={cn("flex flex-wrap gap-1.5", className)}>
+    <div className={cn("-mx-1 flex gap-2 overflow-x-auto px-1 pb-0.5 [-ms-overflow-style:none] [scrollbar-width:none] [&::-webkit-scrollbar]:hidden", className)}>
       {columns.map((col) => {
         const active = sortKey === col.key;
         return (
@@ -107,7 +107,7 @@ export function MobileSortBar<K extends string>({
             type="button"
             onClick={() => onSort(col.key)}
             className={cn(
-              "inline-flex items-center gap-1 border px-2 py-1 text-[10px] uppercase tracking-[0.14em] transition-colors",
+              "inline-flex min-h-10 shrink-0 items-center gap-1.5 border px-3 py-2 text-[11px] uppercase tracking-[0.14em] transition-colors",
               active
                 ? "border-gold/40 bg-gold/10 text-cream"
                 : "border-white/10 text-muted hover:text-cream",
@@ -116,12 +116,12 @@ export function MobileSortBar<K extends string>({
             {col.label}
             {active ? (
               sortDir === "asc" ? (
-                <ArrowUp size={11} className="text-gold" />
+                <ArrowUp size={12} className="text-gold" />
               ) : (
-                <ArrowDown size={11} className="text-gold" />
+                <ArrowDown size={12} className="text-gold" />
               )
             ) : (
-              <ArrowUpDown size={11} className="opacity-40" />
+              <ArrowUpDown size={12} className="opacity-40" />
             )}
           </button>
         );

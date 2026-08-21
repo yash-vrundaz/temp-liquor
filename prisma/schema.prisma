@@ -90,8 +90,28 @@ model Location {
   inventory LocationInventory[]
   events    Event[]
   orders    Order[]
+  drivers   Driver[]
 
   @@map("locations")
+}
+
+model Driver {
+  id         String  @id
+  name       String
+  phone      String
+  email      String?
+  vehicle    String
+  locationId String  @map("location_id")
+  status     String  @default("available")
+  active     Boolean @default(true)
+  photoUrl   String? @map("photo_url")
+
+  location Location @relation(fields: [locationId], references: [id], onDelete: Cascade)
+  orders   Order[]
+
+  @@index([locationId])
+  @@index([status])
+  @@map("drivers")
 }
 
 model LocationInventory {
@@ -111,24 +131,26 @@ model LocationInventory {
 }
 
 model Event {
-  id             String @id
-  slug           String @unique
+  id             String  @id
+  slug           String  @unique
   title          String
   type           String
-  description    String @db.Text
-  locationId     String @map("location_id")
+  description    String  @db.Text
+  locationId     String  @map("location_id")
   date           String
-  startTime      String @map("start_time")
-  endTime        String @map("end_time")
+  startTime      String  @map("start_time")
+  endTime        String  @map("end_time")
   price          Float
-  seatsTotal     Int    @map("seats_total")
-  seatsAvailable Int    @map("seats_available")
+  seatsTotal     Int     @map("seats_total")
+  seatsAvailable Int     @map("seats_available")
   image          String
   hosts          Json
+  active         Boolean @default(true)
 
   location Location @relation(fields: [locationId], references: [id], onDelete: Cascade)
 
   @@index([locationId])
+  @@index([active])
   @@map("events")
 }
 
@@ -186,10 +208,15 @@ model Order {
   fulfillment String
   locationId  String  @map("location_id")
   tracking    String?
+  driverId    String? @map("driver_id")
+  deliveryStatus String? @map("delivery_status")
+  deliveryPhone  String? @map("delivery_phone")
+  deliveryAddress Json?  @map("delivery_address")
   createdAt   DateTime @default(now()) @map("created_at")
 
   user     User              @relation(fields: [userId], references: [id])
   location Location          @relation(fields: [locationId], references: [id])
+  driver   Driver?           @relation(fields: [driverId], references: [id])
   items    OrderItem[]
   ledger   InventoryLedger[]
 

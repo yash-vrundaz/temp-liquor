@@ -10,7 +10,7 @@ import {
   type PointerEvent as ReactPointerEvent,
   type ReactNode,
 } from "react";
-import { getAllEvents } from "@/data/events";
+import { usePublicEvents } from "@/hooks/useRuntimeEvents";
 import type { EventItem } from "@/types";
 
 const EASE = "cubic-bezier(0.22, 1, 0.36, 1)";
@@ -287,7 +287,7 @@ function EventCard({ ev, index }: { ev: EventItem; index: number }) {
 }
 
 export function HomeEvents() {
-  const featured = getAllEvents().slice(0, 2);
+  const featured = usePublicEvents().slice(0, 2);
 
   return (
     <section className="relative overflow-hidden py-24 md:py-28">

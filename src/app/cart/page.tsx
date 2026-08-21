@@ -12,6 +12,7 @@ import { useInventoryStore } from "@/store/inventory";
 import { calculateShipping, calculateTax, formatPrice } from "@/lib/utils";
 import { Button } from "@/components/ui/Button";
 import { Input } from "@/components/ui/Input";
+import { Modal } from "@/components/ui/Modal";
 import { BranchAvailabilityPanel } from "@/components/cart/BranchAvailabilityPanel";
 import { OtherBranchStock } from "@/components/inventory/OtherBranchStock";
 import { LocationStockStrip } from "@/components/inventory/LocationStockStrip";
@@ -28,11 +29,14 @@ export default function CartPage() {
     moveToCart,
     applyCoupon,
     setFulfillment,
+    clear,
   } = useCartStore();
   const branchId = useBranchStore((s) => s.branchId);
   const setBranch = useBranchStore((s) => s.setBranch);
   const branch = getAllLocations().find((l) => l.id === branchId) ?? getAllLocations()[0];
   const [code, setCode] = useState(coupon ?? "");
+  const [confirmClear, setConfirmClear] = useState(false);
+  const [couponMessage, setCouponMessage] = useState("");
   const inventoryRevision = useInventoryStore((s) => s.revision);
   const getOnHand = useInventoryStore((s) => s.getOnHand);
 
@@ -67,7 +71,14 @@ export default function CartPage() {
 
   return (
     <div className="mx-auto max-w-7xl px-3 py-10 sm:px-4 sm:py-14 md:px-8 md:py-16">
-      <h1 className="font-display text-3xl text-cream sm:text-4xl md:text-5xl">Your Cart</h1>
+      <div className="flex flex-col gap-3 sm:flex-row sm:items-end sm:justify-between">
+        <h1 className="font-display text-3xl text-cream sm:text-4xl md:text-5xl">Your Cart</h1>
+        {lines.length > 0 ? (
+          <Button variant="outline" size="sm" onClick={() => setConfirmClear(true)}>
+            Clear cart
+          </Button>
+        ) : null}
+      </div>
 
       <div className="mt-6">
         <p className="mb-2 text-[10px] uppercase tracking-[0.22em] text-gold">
@@ -117,15 +128,18 @@ export default function CartPage() {
                 }`}
               >
                 <div className="flex gap-3 sm:contents">
-                  <div className="relative h-24 w-16 shrink-0 bg-white/5 sm:h-28 sm:w-20">
-                    <Image
-                      src={product.images[0]}
-                      alt={product.name}
-                      fill
-                      className="object-contain p-1"
-                      sizes="80px"
-                    />
-                  </div>
+                <Link
+                  href={`/products/${product.slug}`}
+                  className="relative h-24 w-16 shrink-0 bg-white/5 sm:h-28 sm:w-20"
+                >
+                  <Image
+                    src={product.images[0]}
+                    alt={product.name}
+                    fill
+                    className="object-contain p-1"
+                    sizes="80px"
+                  />
+                </Link>
                   <div className="min-w-0 flex-1">
                     <Link
                       href={`/products/${product.slug}`}
@@ -219,7 +233,9 @@ export default function CartPage() {
                       className="flex flex-col gap-3 border border-white/5 p-3 sm:flex-row sm:items-center sm:justify-between"
                     >
                       <div className="min-w-0">
-                        <span className="text-cream">{p.name}</span>
+                        <Link href={`/products/${p.slug}`} className="text-cream hover:text-gold">
+                          {p.name}
+                        </Link>
                         <p className="text-xs text-muted">
                           {savedStock} at {branch.shortName}
                         </p>
@@ -286,13 +302,36 @@ export default function CartPage() {
             <Input
               placeholder="Coupon code"
               value={code}
-              onChange={(e) => setCode(e.target.value)}
+              onChange={(e) => {
+                setCode(e.target.value);
+                if (couponMessage) setCouponMessage("");
+              }}
             />
-            <Button variant="secondary" className="w-full shrink-0 sm:w-auto" onClick={() => applyCoupon(code.trim() || null)}>
+            <Button
+              variant="secondary"
+              className="w-full shrink-0 sm:w-auto"
+              onClick={() => {
+                const ok = applyCoupon(code.trim() || null);
+                if (!code.trim()) {
+                  setCouponMessage("Coupon cleared.");
+                } else if (ok) {
+                  setCode(code.trim().toUpperCase());
+                  setCouponMessage("Coupon applied.");
+                } else {
+                  setCouponMessage("That code is not valid. Try SAMS10, GOLD15, or WELCOME20.");
+                }
+              }}
+            >
               Apply
             </Button>
           </div>
-          <p className="mt-2 text-[10px] text-muted">Try SAMS10, GOLD15, WELCOME20</p>
+          {couponMessage ? (
+            <p className={`mt-2 text-[10px] ${couponMessage.includes("not valid") ? "text-red-300" : "text-gold"}`}>
+              {couponMessage}
+            </p>
+          ) : (
+            <p className="mt-2 text-[10px] text-muted">Try SAMS10, GOLD15, WELCOME20</p>
+          )}
           <dl className="mt-6 space-y-2 text-sm">
             <div className="flex justify-between">
               <dt className="text-muted">Subtotal</dt>
@@ -335,6 +374,28 @@ export default function CartPage() {
           </Link>
         </aside>
       </div>
+
+      <Modal
+        open={confirmClear}
+        title="Clear your cart?"
+        subtitle="This removes every bottle from the bag. Saved-for-later items stay."
+        onClose={() => setConfirmClear(false)}
+      >
+        <div className="flex flex-col-reverse gap-2 sm:flex-row sm:justify-end">
+          <Button variant="secondary" onClick={() => setConfirmClear(false)}>
+            Keep items
+          </Button>
+          <Button
+            variant="outline"
+            onClick={() => {
+              clear();
+              setConfirmClear(false);
+            }}
+          >
+            Clear cart
+          </Button>
+        </div>
+      </Modal>
     </div>
   );
 }

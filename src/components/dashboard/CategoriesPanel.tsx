@@ -33,7 +33,7 @@ const emptyForm = (): CategoryForm => ({
   color: "#C9A962",
 });
 
-export function CategoriesPanel() {
+export function CategoriesPanel({ embedded = false }: { embedded?: boolean }) {
   const actor = useUserStore((s) => s.profile);
   const bumpRevision = useCatalogStore((s) => s.bumpRevision);
   const catalogRevision = useCatalogStore((s) => s.revision);
@@ -120,10 +120,12 @@ export function CategoriesPanel() {
   };
 
   return (
-    <section className="mt-6">
+    <section className={embedded ? "mt-5" : "mt-6"}>
       <div className="flex flex-col gap-4 border-b border-white/10 pb-5 sm:flex-row sm:items-end sm:justify-between">
         <div>
-          <h2 className="font-display text-2xl text-cream sm:text-3xl">Categories</h2>
+          <h2 className={`font-display text-cream ${embedded ? "text-xl sm:text-2xl" : "text-2xl sm:text-3xl"}`}>
+            Categories
+          </h2>
           <p className="mt-1 text-sm text-muted">
             Shop collections. Bottles must belong to a category, so remove bottles first if you delete one.
           </p>
@@ -138,7 +140,7 @@ export function CategoriesPanel() {
       {error ? <p className="mt-4 text-sm text-red-300">{error}</p> : null}
 
       <MobileSortBar
-        className="mt-5 md:hidden"
+        className="mt-5 lg:hidden"
         columns={[
           { key: "category", label: "Category" },
           { key: "slug", label: "Slug" },
@@ -148,7 +150,7 @@ export function CategoriesPanel() {
         sortDir={sortDir}
         onSort={toggleSort}
       />
-      <ul className="mt-3 divide-y divide-white/10 border border-white/10 md:hidden">
+      <ul className="mt-3 divide-y divide-white/10 border border-white/10 lg:hidden">
         {sortedCategories.map(({ category, count }) => (
           <li key={category.slug} className="p-4">
             <div className="flex items-start gap-3">
@@ -187,13 +189,13 @@ export function CategoriesPanel() {
         ))}
       </ul>
       {categories.length === 0 ? (
-        <div className="mt-3 border border-white/10 px-4 py-14 text-center text-sm text-muted md:hidden">
+        <div className="mt-3 border border-white/10 px-4 py-14 text-center text-sm text-muted lg:hidden">
           <Tags className="mx-auto mb-3 text-gold/70" size={28} />
           No categories yet.
         </div>
       ) : null}
 
-      <div className={`mt-5 hidden md:block ${tableWrapClass}`}>
+      <div className={`mt-5 hidden lg:block ${tableWrapClass}`}>
         <table className="w-full min-w-[640px] text-left text-sm">
           <thead>
             <tr className={tableHeadRowClass}>

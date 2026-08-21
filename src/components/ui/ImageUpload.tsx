@@ -175,7 +175,7 @@ export function GalleryImageUpload({
     <div className={cn("space-y-2", className)}>
       <p className="text-xs text-muted">{label}</p>
       <p className="text-[11px] text-muted">{hint}</p>
-      <div className="grid grid-cols-3 gap-2 sm:grid-cols-4">
+      <div className="grid grid-cols-2 gap-2 sm:grid-cols-3 sm:gap-2 md:grid-cols-4">
         {value.map((url, index) => (
           <div key={`${url.slice(0, 48)}-${index}`} className="relative aspect-4/3 overflow-hidden border border-white/10">
             {/* eslint-disable-next-line @next/next/no-img-element */}

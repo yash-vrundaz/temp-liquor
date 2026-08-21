@@ -13,6 +13,17 @@ const DEFAULT_HOURS = [
 
 const DEFAULT_HERO = "/store/downtown-maison.jpg";
 
+let eventSchemaReady = false;
+
+/** Ensures events.active exists for older databases without a full migrate. */
+export async function ensureEventSchema() {
+  if (!isDbConfigured() || eventSchemaReady) return;
+  await prisma.$executeRawUnsafe(
+    `ALTER TABLE events ADD COLUMN IF NOT EXISTS active BOOLEAN NOT NULL DEFAULT true`,
+  );
+  eventSchemaReady = true;
+}
+
 export const EVENT_TYPES = ["wine-tasting", "whiskey-tasting", "launch", "festival"] as const;
 export type AdminEventType = (typeof EVENT_TYPES)[number];
 
@@ -135,6 +146,15 @@ export async function createStoreLocation(actor: UserProfile, input: LocationInp
         })),
       });
     }
+
+    // Scoped staff/admins must gain access to the store they just created.
+    if (!hasAllLocationAccess(actor) && actor.allowedLocationIds?.length) {
+      const nextIds = [...new Set([...actor.allowedLocationIds, id])];
+      await tx.user.update({
+        where: { id: actor.id },
+        data: { allowedLocationIds: nextIds },
+      });
+    }
   });
 
   const row = await prisma.location.findUnique({
@@ -174,7 +194,11 @@ export async function updateStoreLocation(
     input.shortName && input.shortName.trim() !== existing.shortName
       ? await uniqueLocationSlug(shortName, locationId)
       : existing.slug;
-  const heroImage = input.heroImage?.trim() || existing.heroImage;
+  // Empty string means "cleared" — fall back to default hero, not the previous image.
+  const heroImage =
+    input.heroImage !== undefined
+      ? input.heroImage.trim() || DEFAULT_HERO
+      : existing.heroImage;
   const previousExtras = galleryUrls(existing.gallery).filter((url) => url !== existing.heroImage);
   const gallery =
     input.gallery != null
@@ -276,6 +300,7 @@ export type EventInput = {
   seatsTotal: number;
   image?: string;
   hosts?: string[];
+  active?: boolean;
 };
 
 export async function createStoreEvent(actor: UserProfile, input: EventInput) {
@@ -286,12 +311,17 @@ export async function createStoreEvent(actor: UserProfile, input: EventInput) {
     return { error: "You cannot add events for that store.", status: 403 as const };
   }
   if (!isDbConfigured()) return { error: "Database is not configured.", status: 503 as const };
+  await ensureEventSchema();
   const location = await prisma.location.findUnique({ where: { id: input.locationId } });
   if (!location) return { error: "Location not found.", status: 404 as const };
+  if (input.endTime && input.startTime && input.endTime <= input.startTime) {
+    return { error: "End time must be after start time.", status: 400 as const };
+  }
 
   const seatsTotal = Math.max(1, Math.floor(input.seatsTotal));
   const id = `evt-${crypto.randomUUID().slice(0, 8)}`;
   const slug = await uniqueEventSlug(input.title);
+  const active = input.active ?? true;
   const row = await prisma.event.create({
     data: {
       id,
@@ -310,7 +340,8 @@ export async function createStoreEvent(actor: UserProfile, input: EventInput) {
       hosts: input.hosts?.filter(Boolean) ?? [],
     },
   });
-  const event = mapEvent(row);
+  await prisma.$executeRaw`UPDATE events SET active = ${active} WHERE id = ${id}`;
+  const event = mapEvent({ ...row, active });
   await recordActivity({
     actorUserId: actor.id,
     action: "event.created",
@@ -343,7 +374,32 @@ export async function updateStoreEvent(
 
   const seatsTotal = input.seatsTotal != null ? Math.max(1, Math.floor(input.seatsTotal)) : existing.seatsTotal;
   const sold = existing.seatsTotal - existing.seatsAvailable;
+  if (seatsTotal < sold) {
+    return {
+      error: `At least ${sold} seat${sold === 1 ? "" : "s"} already booked. Raise the total or keep it at ${sold}+.`,
+      status: 409 as const,
+    };
+  }
   const seatsAvailable = Math.max(0, seatsTotal - sold);
+
+  const nextStart = input.startTime ?? existing.startTime;
+  const nextEnd = input.endTime ?? existing.endTime;
+  if (nextStart && nextEnd && nextEnd <= nextStart) {
+    return { error: "End time must be after start time.", status: 400 as const };
+  }
+
+  await ensureEventSchema();
+  const location = await prisma.location.findUnique({ where: { id: nextLocationId } });
+  const fallbackImage = location?.heroImage || DEFAULT_HERO;
+  const nextImage =
+    input.image !== undefined
+      ? input.image.trim() || fallbackImage
+      : existing.image;
+  const existingActiveRows = await prisma.$queryRaw<{ active: boolean }[]>`
+    SELECT active FROM events WHERE id = ${eventId}
+  `;
+  const existingActive = existingActiveRows[0]?.active ?? true;
+  const nextActive = input.active !== undefined ? input.active : existingActive;
 
   const row = await prisma.event.update({
     where: { id: eventId },
@@ -356,23 +412,27 @@ export async function updateStoreEvent(
       description: input.description?.trim() ?? existing.description,
       locationId: nextLocationId,
       date: input.date ?? existing.date,
-      startTime: input.startTime ?? existing.startTime,
-      endTime: input.endTime ?? existing.endTime,
+      startTime: nextStart,
+      endTime: nextEnd,
       price: input.price ?? existing.price,
       seatsTotal,
       seatsAvailable,
-      image: input.image?.trim() || existing.image,
+      image: nextImage,
       hosts: (input.hosts ?? existing.hosts) as string[],
     },
   });
-  const event = mapEvent(row);
+  await prisma.$executeRaw`UPDATE events SET active = ${nextActive} WHERE id = ${eventId}`;
+  const event = mapEvent({ ...row, active: nextActive });
   await recordActivity({
     actorUserId: actor.id,
     action: "event.updated",
     entityType: "event",
     entityId: event.id,
     locationId: event.locationId,
-    summary: `${actor.name} updated event “${event.title}”`,
+    summary:
+      input.active !== undefined && input.active !== existingActive
+        ? `${actor.name} ${event.active ? "activated" : "deactivated"} event “${event.title}”`
+        : `${actor.name} updated event “${event.title}”`,
   });
   return { event };
 }

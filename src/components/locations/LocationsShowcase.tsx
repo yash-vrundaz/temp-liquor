@@ -1,5 +1,6 @@
 "use client";
 
+import dynamic from "next/dynamic";
 import { SmartImage } from "@/components/ui/SmartImage";
 import Link from "next/link";
 import {
@@ -11,32 +12,19 @@ import {
   type ReactNode,
 } from "react";
 import { MapPin, Phone, Clock, Car } from "lucide-react";
-import { getAllLocations } from "@/data/locations";
+import { useRuntimeLocations } from "@/hooks/useRuntimeLocations";
 import type { StoreLocation } from "@/types";
 import { cn } from "@/lib/utils";
 
+const LocationsMap = dynamic(
+  () => import("@/components/locations/LocationsMap").then((m) => m.LocationsMap),
+  {
+    ssr: false,
+    loading: () => <div className="absolute inset-0 bg-[#0c0b09]" />,
+  },
+);
+
 const EASE = "cubic-bezier(0.22, 1, 0.36, 1)";
-
-/** NYC metro viewport for the embed — pins are projected into this box. */
-const MAP_BBOX = {
-  west: -74.05,
-  south: 40.68,
-  east: -73.93,
-  north: 40.79,
-} as const;
-
-const MAP_EMBED_SRC = `https://www.openstreetmap.org/export/embed.html?bbox=${MAP_BBOX.west}%2C${MAP_BBOX.south}%2C${MAP_BBOX.east}%2C${MAP_BBOX.north}&layer=mapnik`;
-
-function pinPercent(lat: number, lng: number) {
-  const left =
-    ((lng - MAP_BBOX.west) / (MAP_BBOX.east - MAP_BBOX.west)) * 100;
-  const top =
-    ((MAP_BBOX.north - lat) / (MAP_BBOX.north - MAP_BBOX.south)) * 100;
-  return {
-    left: `${Math.min(92, Math.max(8, left))}%`,
-    top: `${Math.min(88, Math.max(10, top))}%`,
-  };
-}
 
 function usePrefersReducedMotion() {
   const [reduced, setReduced] = useState(false);
@@ -157,7 +145,6 @@ function BreathingGlow({ className = "" }: { className?: string }) {
   );
 }
 
-/** Compact, consistent hours line for equal card layout */
 function hoursSummary(loc: StoreLocation) {
   const first = loc.hours[0];
   const last = loc.hours[loc.hours.length - 1];
@@ -169,10 +156,9 @@ function hoursSummary(loc: StoreLocation) {
 }
 
 function parkingSummary(loc: StoreLocation) {
-  // Keep every card to one short parking line
-  if (loc.slug.includes("downtown")) return "Valet on Grand · Garage on Mercer";
-  if (loc.slug.includes("waterfront")) return "Free parking behind the store";
-  return "Street parking · Garage on 72nd";
+  const text = loc.parking?.trim();
+  if (!text) return "Parking details on request";
+  return text.length > 72 ? `${text.slice(0, 69)}…` : text;
 }
 
 function LocationCard({ loc, index }: { loc: StoreLocation; index: number }) {
@@ -249,7 +235,6 @@ function LocationCard({ loc, index }: { loc: StoreLocation; index: number }) {
               : "0 14px 36px -20px rgba(0,0,0,0.75)",
           }}
         >
-          {/* Hero — effects stay here only so body text stays sharp */}
           <div className="relative h-52 shrink-0 overflow-hidden">
             <SmartImage
               src={loc.heroImage}
@@ -266,7 +251,6 @@ function LocationCard({ loc, index }: { loc: StoreLocation; index: number }) {
               quality={92}
               priority={index === 0}
             />
-            {/* Light bottom fade only — keeps photo crisp */}
             <div
               aria-hidden
               className="absolute inset-0"
@@ -275,7 +259,6 @@ function LocationCard({ loc, index }: { loc: StoreLocation; index: number }) {
                   "linear-gradient(to top, rgba(11,11,11,0.88) 0%, rgba(11,11,11,0.25) 45%, transparent 72%)",
               }}
             />
-            {/* Sheen + glow clipped to photo */}
             <div
               aria-hidden
               className="pointer-events-none absolute inset-0"
@@ -305,7 +288,7 @@ function LocationCard({ loc, index }: { loc: StoreLocation; index: number }) {
               }}
             >
               <p className="text-[10px] font-medium uppercase tracking-[0.28em] text-[var(--gold-bright)]">
-                Store 0{index + 1}
+                Store {String(index + 1).padStart(2, "0")}
               </p>
               <h2 className="mt-1.5 font-display text-[1.85rem] leading-none text-[var(--cream)] drop-shadow-[0_2px_8px_rgba(0,0,0,0.65)] md:text-[2rem]">
                 {loc.shortName}
@@ -321,7 +304,6 @@ function LocationCard({ loc, index }: { loc: StoreLocation; index: number }) {
             </div>
           </div>
 
-          {/* Solid body — no overlays, sharp readable type */}
           <div className="relative z-10 flex flex-1 flex-col bg-[#0b0b0b] px-5 pb-5 pt-1 md:px-6 md:pb-6">
             <ul className="grid gap-0 text-[13px] leading-snug text-[var(--cream)]">
               <li className="flex min-h-11 items-center gap-2.5 border-b border-white/10 py-2.5">
@@ -387,7 +369,23 @@ function LocationCard({ loc, index }: { loc: StoreLocation; index: number }) {
 }
 
 export function LocationsShowcase() {
+  const locations = useRuntimeLocations();
   const [activeBranch, setActiveBranch] = useState<string | null>(null);
+
+  const focusStore = useCallback((id: string) => {
+    setActiveBranch(id);
+    document.getElementById(`store-card-${id}`)?.scrollIntoView({
+      behavior: "smooth",
+      block: "nearest",
+    });
+  }, []);
+
+  const storeCountLabel =
+    locations.length === 0
+      ? "Stores will appear here once added."
+      : locations.length === 1
+        ? "One branch with location-based inventory, pickup, and delivery."
+        : `${locations.length} branches with location-based inventory, pickup, and delivery.`;
 
   return (
     <section className="relative overflow-hidden pb-8">
@@ -416,12 +414,11 @@ export function LocationsShowcase() {
           </LineReveal>
           <Reveal delay={0.18}>
             <p className="mt-5 max-w-xl text-sm leading-relaxed text-[var(--muted)] md:text-base">
-              Three New York branches with location-based inventory, pickup, and delivery.
+              {storeCountLabel}
             </p>
           </Reveal>
         </div>
 
-        {/* Map stage — pins locked to store coords; controls overlay the map */}
         <Reveal delay={0.12}>
           <div
             className="relative mb-6 overflow-hidden rounded-sm md:mb-8"
@@ -435,93 +432,26 @@ export function LocationsShowcase() {
             }}
           >
             <div className="relative aspect-[16/10] w-full min-h-64 sm:min-h-72 md:aspect-[21/9] md:min-h-80">
-              <iframe
-                title="Store locations map"
-                className="pointer-events-none absolute inset-0 h-full w-full opacity-[0.72] grayscale contrast-125 brightness-90"
-                loading="lazy"
-                referrerPolicy="no-referrer-when-downgrade"
-                src={MAP_EMBED_SRC}
-              />
-              <div
-                aria-hidden
-                className="pointer-events-none absolute inset-0"
-                style={{
-                  background:
-                    "radial-gradient(ellipse at 50% 42%, transparent 28%, rgba(5,5,5,0.55) 100%), linear-gradient(to bottom, rgba(5,5,5,0.3) 0%, transparent 18%, transparent 58%, rgba(5,5,5,0.82) 100%)",
-                }}
+              <LocationsMap
+                className="absolute inset-0"
+                locations={locations}
+                activeId={activeBranch}
+                onActiveChange={setActiveBranch}
+                onSelect={focusStore}
               />
 
-              {getAllLocations().map((loc) => {
-                const pos = pinPercent(loc.lat, loc.lng);
-                const hot = activeBranch === loc.id;
-                return (
-                  <button
-                    key={loc.id}
-                    type="button"
-                    onMouseEnter={() => setActiveBranch(loc.id)}
-                    onMouseLeave={() => setActiveBranch(null)}
-                    onFocus={() => setActiveBranch(loc.id)}
-                    onBlur={() => setActiveBranch(null)}
-                    onClick={() => {
-                      setActiveBranch(loc.id);
-                      document
-                        .getElementById(`store-card-${loc.id}`)
-                        ?.scrollIntoView({ behavior: "smooth", block: "nearest" });
-                    }}
-                    className="absolute z-[3] -translate-x-1/2 -translate-y-full"
-                    style={{ top: pos.top, left: pos.left }}
-                    aria-label={`${loc.shortName} store`}
-                  >
-                    <span
-                      className="relative flex flex-col items-center"
-                      style={{
-                        transform: hot ? "scale(1.1) translateY(-2px)" : "scale(1)",
-                        transition: `transform 0.55s ${EASE}`,
-                      }}
-                    >
-                      <span
-                        className="mb-1 whitespace-nowrap px-2 py-0.5 font-display text-xs text-[var(--cream)]"
-                        style={{
-                          background: "rgba(7,7,7,0.88)",
-                          boxShadow: hot
-                            ? "inset 0 0 0 1px rgba(232,201,122,0.75)"
-                            : "inset 0 0 0 1px rgba(201,168,76,0.4)",
-                        }}
-                      >
-                        {loc.shortName}
-                      </span>
-                      <span
-                        className="block h-3 w-3 rotate-45"
-                        style={{
-                          background: hot ? "var(--gold-bright)" : "var(--gold)",
-                          boxShadow: hot
-                            ? "0 0 18px rgba(232,201,122,0.7)"
-                            : "0 0 10px rgba(201,168,76,0.35)",
-                          transition: `background 0.5s ${EASE}, box-shadow 0.5s ${EASE}`,
-                        }}
-                      />
-                    </span>
-                  </button>
-                );
-              })}
-
-              <div className="absolute inset-x-0 bottom-0 z-[4] flex flex-wrap items-center justify-between gap-2 px-3 pb-3 pt-10 sm:px-4">
+              <div className="pointer-events-none absolute inset-x-0 bottom-0 z-[4] flex flex-wrap items-center justify-between gap-2 px-3 pb-3 pt-10 sm:px-4">
                 <p className="text-[10px] uppercase tracking-[0.2em] text-[var(--muted)]">
                   Interactive map
                 </p>
-                <div className="flex flex-wrap gap-1.5">
-                  {getAllLocations().map((loc) => (
+                <div className="pointer-events-auto flex flex-wrap gap-1.5">
+                  {locations.map((loc) => (
                     <button
                       key={loc.id}
                       type="button"
                       onMouseEnter={() => setActiveBranch(loc.id)}
                       onMouseLeave={() => setActiveBranch(null)}
-                      onClick={() => {
-                        setActiveBranch(loc.id);
-                        document
-                          .getElementById(`store-card-${loc.id}`)
-                          ?.scrollIntoView({ behavior: "smooth", block: "nearest" });
-                      }}
+                      onClick={() => focusStore(loc.id)}
                       className="whitespace-nowrap px-2.5 py-1 text-[11px] tracking-wide transition-[color,box-shadow,background] duration-500"
                       style={{
                         color:
@@ -548,12 +478,17 @@ export function LocationsShowcase() {
           </div>
         </Reveal>
 
-        {/* Equal-height card row */}
-        <div className="grid auto-rows-fr grid-cols-1 items-stretch gap-5 md:grid-cols-2 lg:grid-cols-3 lg:gap-6">
-          {getAllLocations().map((loc, i) => (
-            <LocationCard key={loc.id} loc={loc} index={i} />
-          ))}
-        </div>
+        {locations.length === 0 ? (
+          <div className="border border-white/10 px-4 py-16 text-center text-sm text-muted">
+            No stores yet. Add a location from the dashboard to show it here.
+          </div>
+        ) : (
+          <div className="grid auto-rows-fr grid-cols-1 items-stretch gap-5 md:grid-cols-2 lg:grid-cols-3 lg:gap-6">
+            {locations.map((loc, i) => (
+              <LocationCard key={loc.id} loc={loc} index={i} />
+            ))}
+          </div>
+        )}
       </div>
     </section>
   );

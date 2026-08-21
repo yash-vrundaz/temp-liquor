@@ -3,6 +3,7 @@
 import { usePathname } from "next/navigation";
 import { Header } from "@/components/layout/Header";
 import { Footer } from "@/components/layout/Footer";
+import { CartAddedToast } from "@/components/cart/CartAddedToast";
 
 export function SiteChrome({ children }: { children: React.ReactNode }) {
   const pathname = usePathname();
@@ -31,6 +32,7 @@ export function SiteChrome({ children }: { children: React.ReactNode }) {
         {children}
       </main>
       {!immersive && <Footer />}
+      <CartAddedToast />
     </>
   );
 }

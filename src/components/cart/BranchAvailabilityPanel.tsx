@@ -4,6 +4,7 @@ import Image from "next/image";
 import Link from "next/link";
 import { MapPin, AlertTriangle, PackageMinus, ArrowRightLeft } from "lucide-react";
 import { useCartStore } from "@/store/cart";
+import { addToCart } from "@/lib/add-to-cart";
 import { useBranchStore } from "@/store/branch";
 import {
   analyzeCartAvailability,
@@ -23,7 +24,6 @@ type Props = {
 export function BranchAvailabilityPanel({ compact = false }: Props) {
   const items = useCartStore((s) => s.items);
   const removeItem = useCartStore((s) => s.removeItem);
-  const addItem = useCartStore((s) => s.addItem);
   const branchId = useBranchStore((s) => s.branchId);
   const setBranch = useBranchStore((s) => s.setBranch);
   const inventoryRevision = useInventoryStore((s) => s.revision);
@@ -226,7 +226,7 @@ export function BranchAvailabilityPanel({ compact = false }: Props) {
                     type="button"
                     size="sm"
                     variant="outline"
-                    onClick={() => addItem(p.id, 1)}
+                    onClick={() => addToCart(p.id, 1)}
                   >
                     Add
                   </Button>

@@ -1,31 +1,52 @@
 "use client";
 
-import { FormEvent, useState } from "react";
+import { FormEvent, Suspense, useEffect, useState } from "react";
 import Link from "next/link";
+import { useSearchParams } from "next/navigation";
 import { AuthCard } from "@/components/auth/AuthCard";
 import { Button } from "@/components/ui/Button";
 import { Input } from "@/components/ui/Input";
 import { PasswordInput } from "@/components/ui/PasswordInput";
 import { useUserStore } from "@/store/user";
+import { validatePassword } from "@/lib/auth/password";
+import { safeInternalPath } from "@/lib/utils";
 
-export default function SignupPage() {
+function SignupForm() {
+  const search = useSearchParams();
   const signup = useUserStore((s) => s.signup);
+  const isLoggedIn = useUserStore((s) => s.isLoggedIn);
+  const authReady = useUserStore((s) => s.authReady);
   const [name, setName] = useState("");
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [error, setError] = useState("");
   const [busy, setBusy] = useState(false);
+  const next = safeInternalPath(search.get("next")) || "/account";
+
+  useEffect(() => {
+    if (authReady && isLoggedIn) {
+      window.location.replace(next);
+    }
+  }, [authReady, isLoggedIn, next]);
 
   const onSubmit = async (event: FormEvent) => {
     event.preventDefault();
     setError("");
+    const passwordError = validatePassword(password);
+    if (passwordError) {
+      setError(passwordError);
+      return;
+    }
+    if (name.trim().length < 2) {
+      setError("Enter your full name.");
+      return;
+    }
     setBusy(true);
     try {
       await signup(name, email, password);
-      window.location.assign("/account");
+      window.location.assign(next);
     } catch (err) {
       setError(err instanceof Error ? err.message : "Sign up failed.");
-    } finally {
       setBusy(false);
     }
   };
@@ -45,6 +66,7 @@ export default function SignupPage() {
             value={name}
             onChange={(e) => setName(e.target.value)}
             required
+            minLength={2}
           />
         </label>
         <label className="block text-xs text-muted">
@@ -77,10 +99,21 @@ export default function SignupPage() {
       </form>
       <p className="mt-5 text-center text-sm text-muted">
         Already a member?{" "}
-        <Link href="/login" className="text-gold hover:underline">
+        <Link
+          href={next !== "/account" ? `/login?next=${encodeURIComponent(next)}` : "/login"}
+          className="text-gold hover:underline"
+        >
           Sign in
         </Link>
       </p>
     </AuthCard>
+  );
+}
+
+export default function SignupPage() {
+  return (
+    <Suspense>
+      <SignupForm />
+    </Suspense>
   );
 }

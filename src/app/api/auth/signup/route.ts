@@ -7,9 +7,9 @@ import { clientIp, rateLimit, tooManyRequests } from "@/lib/rate-limit";
 
 export async function POST(request: Request) {
   try {
-    const limit = rateLimit(`signup:ip:${clientIp(request)}`, { limit: 5, windowMs: 60 * 60_000 });
-    if (!limit.ok) {
-      return tooManyRequests(limit.retryAfter, "Too many sign-up attempts. Try again later.");
+    const limited = rateLimit(`signup:${clientIp(request)}`, { limit: 10, windowMs: 60_000 });
+    if (!limited.ok) {
+      return tooManyRequests(limited.retryAfter, "Too many sign-up attempts. Try again shortly.");
     }
     const parsed = signupSchema.safeParse(await request.json());
     if (!parsed.success) {

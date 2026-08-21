@@ -10,7 +10,7 @@ import {
   type PointerEvent as ReactPointerEvent,
   type ReactNode,
 } from "react";
-import { getAllLocations } from "@/data/locations";
+import { useRuntimeLocations } from "@/hooks/useRuntimeLocations";
 
 const EASE = "cubic-bezier(0.22, 1, 0.36, 1)";
 
@@ -259,11 +259,14 @@ function StoreCard({
 }
 
 export function HomeLocations() {
+  const locations = useRuntimeLocations();
+  const hero = locations[0]?.heroImage ?? "/store/downtown-maison.jpg";
+
   return (
     <section className="relative overflow-hidden py-24 md:py-28">
       <div className="absolute inset-0">
         <SmartImage
-          src={getAllLocations()[0].heroImage}
+          src={hero}
           alt=""
           fill
           className="object-cover object-right opacity-40"
@@ -297,18 +300,22 @@ export function HomeLocations() {
           </Reveal>
           <LineReveal delay={0.08} className="mt-4">
             <h2 className="font-display text-4xl leading-[1.1] text-[var(--cream)] md:text-5xl lg:text-[3.25rem]">
-              Three stores. One destination.
+              {locations.length <= 1
+                ? "Find your store"
+                : `${locations.length} stores. One destination.`}
             </h2>
           </LineReveal>
           <Reveal delay={0.18}>
             <p className="mt-5 max-w-xl text-sm leading-relaxed text-[var(--muted)] md:text-base">
-              Downtown flagship, Waterfront harbor boutique, and Uptown allocation salon.
+              {locations.length === 0
+                ? "New branches appear here as soon as they are added."
+                : locations.map((loc) => loc.shortName).join(", ")}
             </p>
           </Reveal>
         </div>
 
         <div className="grid auto-rows-fr grid-cols-1 items-stretch gap-5 sm:grid-cols-2 lg:grid-cols-3 md:gap-6">
-          {getAllLocations().map((loc, i) => (
+          {locations.map((loc, i) => (
             <StoreCard
               key={loc.id}
               index={i}

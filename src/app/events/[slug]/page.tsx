@@ -2,9 +2,9 @@
 
 import { notFound, useParams } from "next/navigation";
 import { SmartImage } from "@/components/ui/SmartImage";
-import { useState } from "react";
-import { getEventBySlug } from "@/data/events";
+import { useMemo, useState } from "react";
 import { getLocationById } from "@/data/locations";
+import { useRuntimeEvents } from "@/hooks/useRuntimeEvents";
 import { formatPrice } from "@/lib/utils";
 import { Button } from "@/components/ui/Button";
 import { Input } from "@/components/ui/Input";
@@ -12,7 +12,11 @@ import { useInventoryStore } from "@/store/inventory";
 
 export default function EventDetailPage() {
   const { slug } = useParams<{ slug: string }>();
-  const event = getEventBySlug(slug);
+  const events = useRuntimeEvents();
+  const event = useMemo(
+    () => events.find((item) => item.slug === slug && item.active !== false),
+    [events, slug],
+  );
   const [seats, setSeats] = useState(1);
   const [booked, setBooked] = useState(false);
   const [name, setName] = useState("");

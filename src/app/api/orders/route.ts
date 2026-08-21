@@ -1,25 +1,24 @@
 import { NextResponse } from "next/server";
 import { cancelOrder, fetchInventoryState, placeOrder, StockConflictError } from "@/lib/db/queries";
 import { cancelOrderSchema, placeOrderSchema } from "@/lib/db/validators";
-import { getRequestUser } from "@/lib/auth/require";
-import { clientIp, rateLimit, tooManyRequests } from "@/lib/rate-limit";
+import { getRequestUser, requireUser } from "@/lib/auth/require";
 
 export async function POST(request: Request) {
   try {
-    const limit = rateLimit(`order:ip:${clientIp(request)}`, { limit: 15, windowMs: 60_000 });
-    if (!limit.ok) {
-      return tooManyRequests(limit.retryAfter);
-    }
     const parsed = placeOrderSchema.safeParse(await request.json());
     if (!parsed.success) {
-      return NextResponse.json({ error: "Invalid order payload." }, { status: 400 });
+      const first = parsed.error.issues[0]?.message;
+      return NextResponse.json(
+        { error: first || "Invalid order payload." },
+        { status: 400 },
+      );
     }
     const actor = await getRequestUser();
-    // Never trust a userId from the request body — a logged-in customer is
-    // identified by their session, a guest by their email. Otherwise anyone
-    // could attribute orders (and loyalty points) to an arbitrary account.
+    // Never trust body userId — guests cannot attribute orders to arbitrary accounts.
+    const { userId: _ignored, ...orderInput } = parsed.data;
+    void _ignored;
     const result = await placeOrder({
-      ...parsed.data,
+      ...orderInput,
       userId: actor?.id,
     });
     const inventory = await fetchInventoryState();
@@ -31,6 +30,18 @@ export async function POST(request: Request) {
         { status: 409 },
       );
     }
+    if (error instanceof Error) {
+      const known = [
+        "An account with this email already exists",
+        "Delivery address is required",
+        "Signed-in account is not available",
+        "Location not found",
+        "Unknown product",
+      ];
+      if (known.some((msg) => error.message.includes(msg))) {
+        return NextResponse.json({ error: error.message }, { status: 400 });
+      }
+    }
     console.error("[POST /api/orders]", error);
     return NextResponse.json({ error: "Failed to create order." }, { status: 500 });
   }
@@ -38,20 +49,18 @@ export async function POST(request: Request) {
 
 export async function PATCH(request: Request) {
   try {
+    const { user, error } = await requireUser();
+    if (error) return error;
     const parsed = cancelOrderSchema.safeParse(await request.json());
     if (!parsed.success) {
       return NextResponse.json({ error: "Invalid cancel payload." }, { status: 400 });
     }
-    // Cancelling an order changes stock and order state — require a session and
-    // only ever act on the signed-in user's own orders. cancelOrder already
-    // scopes by userId, so a body-supplied userId could target anyone's order.
-    const actor = await getRequestUser();
-    if (!actor) {
-      return NextResponse.json({ error: "Sign in required." }, { status: 401 });
-    }
-    const order = await cancelOrder(parsed.data.orderId, actor.id);
+    const order = await cancelOrder(parsed.data.orderId, user.id);
     if (!order) {
-      return NextResponse.json({ error: "Order not found or already cancelled." }, { status: 404 });
+      return NextResponse.json(
+        { error: "Order not found or cannot be cancelled." },
+        { status: 404 },
+      );
     }
     const inventory = await fetchInventoryState();
     return NextResponse.json({ order, inventory });

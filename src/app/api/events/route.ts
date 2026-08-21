@@ -3,7 +3,6 @@ import { bookEventSeats, fetchEventBySlug, fetchEvents, fetchInventoryState } fr
 import { bookSeatsSchema, eventPatchSchema, eventWriteSchema } from "@/lib/db/validators";
 import { getRequestUser, requirePermission } from "@/lib/auth/require";
 import { createStoreEvent, deleteStoreEvent, updateStoreEvent } from "@/lib/db/store-admin";
-import { clientIp, rateLimit, tooManyRequests } from "@/lib/rate-limit";
 
 export async function GET(request: Request) {
   try {
@@ -26,17 +25,12 @@ export async function GET(request: Request) {
 
 export async function POST(request: Request) {
   try {
-    const limit = rateLimit(`book:ip:${clientIp(request)}`, { limit: 20, windowMs: 60_000 });
-    if (!limit.ok) {
-      return tooManyRequests(limit.retryAfter);
-    }
     const parsed = bookSeatsSchema.safeParse(await request.json());
     if (!parsed.success) {
       return NextResponse.json({ error: "Invalid booking payload." }, { status: 400 });
     }
     const actor = await getRequestUser();
-    // Attribute the booking to the session only; a body-supplied actorUserId
-    // would let a guest forge who booked in the audit log.
+    // Ignore spoofable body actorUserId — guests book as anonymous.
     const ok = await bookEventSeats(parsed.data.eventId, parsed.data.qty, actor?.id);
     if (!ok) {
       return NextResponse.json({ error: "Not enough seats available." }, { status: 409 });
@@ -55,7 +49,10 @@ export async function PUT(request: Request) {
     if (error) return error;
     const parsed = eventWriteSchema.safeParse(await request.json());
     if (!parsed.success) {
-      return NextResponse.json({ error: "Event title, store, date, and seats are required." }, { status: 400 });
+      return NextResponse.json(
+        { error: parsed.error.issues[0]?.message || "Event title, store, date, and seats are required." },
+        { status: 400 },
+      );
     }
     const result = await createStoreEvent(user, parsed.data);
     if ("error" in result && result.error) {
@@ -74,7 +71,10 @@ export async function PATCH(request: Request) {
     if (error) return error;
     const parsed = eventPatchSchema.safeParse(await request.json());
     if (!parsed.success) {
-      return NextResponse.json({ error: "Invalid event update." }, { status: 400 });
+      return NextResponse.json(
+        { error: parsed.error.issues[0]?.message || "Invalid event update." },
+        { status: 400 },
+      );
     }
     const result = await updateStoreEvent(user, parsed.data.eventId, parsed.data.patch);
     if ("error" in result && result.error) {

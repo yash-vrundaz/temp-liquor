@@ -15,6 +15,7 @@ import {
   apiUpdateMe,
 } from "@/lib/api-mutations";
 import { useInventoryStore } from "@/store/inventory";
+import { useBranchStore } from "@/store/branch";
 import { setCurrentActorId } from "@/lib/current-actor";
 
 export { isStaffRole, canManageUsers };
@@ -22,6 +23,12 @@ export { isStaffRole, canManageUsers };
 function applySession(isLoggedIn: boolean, profile: UserProfile) {
   setCurrentActorId(isLoggedIn ? profile.id : undefined);
   return { isLoggedIn, profile };
+}
+
+function syncPreferredBranch(profile: UserProfile) {
+  if (profile.preferredBranchId) {
+    useBranchStore.getState().setBranch(profile.preferredBranchId);
+  }
 }
 
 type UserState = {
@@ -52,10 +59,12 @@ export const useUserStore = create<UserState>()((set, get) => ({
   authReady: false,
   login: async (email, password) => {
     const { user } = await apiLogin(email, password);
+    syncPreferredBranch(user);
     set({ ...applySession(true, user), authReady: true });
   },
   signup: async (name, email, password) => {
     const { user } = await apiSignup(name, email, password);
+    syncPreferredBranch(user);
     set({ ...applySession(true, user), authReady: true });
   },
   logout: async () => {
@@ -69,6 +78,7 @@ export const useUserStore = create<UserState>()((set, get) => ({
   hydrateSession: async () => {
     try {
       const { user } = await apiMe();
+      syncPreferredBranch(user);
       set({ ...applySession(true, user), authReady: true });
     } catch {
       set({ ...applySession(false, demoUser), authReady: true });
@@ -132,7 +142,7 @@ export const useUserStore = create<UserState>()((set, get) => ({
     }),
   cancelOrder: (orderId) => {
     const order = get().profile.orders.find((o) => o.id === orderId);
-    if (!order || order.status === "cancelled") return null;
+    if (!order || order.status === "cancelled" || order.status === "delivered") return null;
     set((s) => ({
       profile: {
         ...s.profile,

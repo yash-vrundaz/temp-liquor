@@ -27,9 +27,16 @@ export async function PATCH(request: Request) {
       return NextResponse.json({ error: "Invalid inventory payload." }, { status: 400 });
     }
     const body = parsed.data;
-    const permission =
-      body.action === "reset" ? "inventory.reset" : "inventory.adjust";
-    const allowed = await requirePermission(permission);
+    const needsRestock =
+      (body.action === "adjust" && body.reason === "restock" && body.delta > 0) ||
+      (body.action === "set" && body.reason === "restock");
+    const permissionKey =
+      body.action === "reset"
+        ? ("inventory.reset" as const)
+        : needsRestock
+          ? ("inventory.restock" as const)
+          : ("inventory.adjust" as const);
+    const allowed = await requirePermission(permissionKey);
     if (allowed.error) return allowed.error;
     const actorUserId = allowed.user.id;
     if (body.action === "reset" && !body.locationId && !hasAllLocationAccess(allowed.user)) {

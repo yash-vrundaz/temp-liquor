@@ -167,6 +167,7 @@ export function ActivityLogsPanel() {
   const [toDate, setToDate] = useState("");
   const [page, setPage] = useState(1);
   const [pageSize, setPageSize] = useState(10);
+  const [filtersOpen, setFiltersOpen] = useState(false);
   const { sortKey, sortDir, toggleSort } = useTableSort<"when" | "user" | "action" | "entity">(
     "when",
     "desc",
@@ -316,83 +317,103 @@ export function ActivityLogsPanel() {
             { value: "custom", label: "Custom range" },
           ]}
         />
-        <label className="block text-xs text-muted">
-          From
-          <Input
-            className="mt-1 py-2 scheme-dark"
-            type="date"
-            value={fromDate}
-            max={toDate || undefined}
-            onChange={(e) => {
-              setFromDate(e.target.value);
-              setDatePreset("custom");
-            }}
-          />
-        </label>
-        <label className="block text-xs text-muted">
-          To
-          <Input
-            className="mt-1 py-2 scheme-dark"
-            type="date"
-            value={toDate}
-            min={fromDate || undefined}
-            onChange={(e) => {
-              setToDate(e.target.value);
-              setDatePreset("custom");
-            }}
-          />
-        </label>
-        <Select
-          label="Action"
-          value={action}
-          onChange={setAction}
-          options={[
-            { value: "all", label: "All actions" },
-            ...Object.entries(ACTION_LABELS).map(([id, label]) => ({
-              value: id,
-              label,
-            })),
-          ]}
-        />
-        <Select
-          label="Entity"
-          value={entityType}
-          onChange={setEntityType}
-          options={[
-            { value: "all", label: "All entities" },
-            ...Object.entries(ENTITY_LABELS).map(([id, label]) => ({
-              value: id,
-              label,
-            })),
-          ]}
-        />
-        <Select
-          label="Location"
-          value={locationId}
-          onChange={setLocationId}
-          options={[
-            { value: "all", label: "All branches" },
-            ...locations.map((loc) => ({
-              value: loc.id,
-              label: loc.shortName,
-            })),
-          ]}
-        />
-        <Select
-          label="User"
-          value={actor}
-          onChange={setActor}
-          options={[
-            { value: "all", label: "Everyone" },
-            ...actors
-              .slice()
-              .sort((a, b) => a[1].localeCompare(b[1]))
-              .map(([id, name]) => ({
-                value: id,
-                label: name,
-              })),
-          ]}
-        />
+        <div className="flex items-end sm:col-span-2 lg:col-span-2">
+          <Button
+            type="button"
+            size="sm"
+            variant="secondary"
+            className="min-h-11 w-full"
+            onClick={() => setFiltersOpen((v) => !v)}
+            aria-expanded={filtersOpen}
+          >
+            {filtersOpen ? "Hide filters" : "More filters"}
+          </Button>
+        </div>
+        {(filtersOpen || datePreset === "custom") && (
+          <>
+            <label className="block text-xs text-muted">
+              From
+              <Input
+                className="mt-1 py-2 scheme-dark"
+                type="date"
+                value={fromDate}
+                max={toDate || undefined}
+                onChange={(e) => {
+                  setFromDate(e.target.value);
+                  setDatePreset("custom");
+                }}
+              />
+            </label>
+            <label className="block text-xs text-muted">
+              To
+              <Input
+                className="mt-1 py-2 scheme-dark"
+                type="date"
+                value={toDate}
+                min={fromDate || undefined}
+                onChange={(e) => {
+                  setToDate(e.target.value);
+                  setDatePreset("custom");
+                }}
+              />
+            </label>
+          </>
+        )}
+        {filtersOpen ? (
+          <>
+            <Select
+              label="Action"
+              value={action}
+              onChange={setAction}
+              options={[
+                { value: "all", label: "All actions" },
+                ...Object.entries(ACTION_LABELS).map(([id, label]) => ({
+                  value: id,
+                  label,
+                })),
+              ]}
+            />
+            <Select
+              label="Entity"
+              value={entityType}
+              onChange={setEntityType}
+              options={[
+                { value: "all", label: "All entities" },
+                ...Object.entries(ENTITY_LABELS).map(([id, label]) => ({
+                  value: id,
+                  label,
+                })),
+              ]}
+            />
+            <Select
+              label="Location"
+              value={locationId}
+              onChange={setLocationId}
+              options={[
+                { value: "all", label: "All branches" },
+                ...locations.map((loc) => ({
+                  value: loc.id,
+                  label: loc.shortName,
+                })),
+              ]}
+            />
+            <Select
+              label="User"
+              value={actor}
+              onChange={setActor}
+              options={[
+                { value: "all", label: "Everyone" },
+                ...actors
+                  .slice()
+                  .sort((a, b) => a[1].localeCompare(b[1]))
+                  .map(([id, name]) => ({
+                    value: id,
+                    label: name,
+                  })),
+              ]}
+            />
+          </>
+        ) : null}
       </div>
 
       <div className="mt-4 flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
@@ -408,7 +429,7 @@ export function ActivityLogsPanel() {
       {error && <p className="mt-2 text-sm text-red-300">{error}</p>}
 
       <MobileSortBar
-        className="mt-4 md:hidden"
+        className="mt-4 lg:hidden"
         columns={[
           { key: "when", label: "When" },
           { key: "user", label: "User" },
@@ -420,7 +441,7 @@ export function ActivityLogsPanel() {
         onSort={toggleSort}
       />
 
-      <div className={`mt-4 hidden md:block ${tableWrapClass}`}>
+      <div className={`mt-4 hidden lg:block ${tableWrapClass}`}>
         <table className="w-full min-w-[860px] text-left text-sm">
           <thead>
             <tr className={tableHeadRowClass}>
@@ -470,7 +491,7 @@ export function ActivityLogsPanel() {
         </table>
       </div>
 
-      <ol className="mt-4 space-y-3 md:hidden">
+      <ol className="mt-4 space-y-3 lg:hidden">
         {logs.map((log) => {
           const loc = locations.find((l) => l.id === log.locationId);
           const when = new Date(log.createdAt);

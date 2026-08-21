@@ -17,6 +17,7 @@ export const events: EventItem[] = [
     seatsAvailable: 8,
     image: "/store/downtown-maison.jpg",
     hosts: ["Marcus Chen"],
+    active: true,
   },
   {
     id: "e2",
@@ -34,6 +35,7 @@ export const events: EventItem[] = [
     seatsAvailable: 3,
     image: "/store/waterfront-alt.jpg",
     hosts: ["Ava Laurent"],
+    active: true,
   },
   {
     id: "e3",
@@ -51,6 +53,7 @@ export const events: EventItem[] = [
     seatsAvailable: 42,
     image: "/store/waterfront-maison.jpg",
     hosts: ["Sofia Alvarez"],
+    active: true,
   },
   {
     id: "e4",
@@ -68,6 +71,7 @@ export const events: EventItem[] = [
     seatsAvailable: 2,
     image: "/store/downtown-alt.jpg",
     hosts: ["James Whitmore", "Ava Laurent"],
+    active: true,
   },
 ];
 
@@ -382,10 +386,20 @@ export function getAllEvents() {
   return runtimeData().getRuntimeEvents();
 }
 
+/** Public listings — inactive events stay hidden. */
+export function getPublicEvents() {
+  return getAllEvents().filter((e) => e.active !== false);
+}
+
 export function getReviewsForProduct(productId: string) {
   return runtimeData().getRuntimeReviews().filter((r) => r.productId === productId);
 }
 
 export function getEventBySlug(slug: string) {
   return getAllEvents().find((e) => e.slug === slug);
+}
+
+export function getPublicEventBySlug(slug: string) {
+  const event = getEventBySlug(slug);
+  return event && event.active !== false ? event : undefined;
 }

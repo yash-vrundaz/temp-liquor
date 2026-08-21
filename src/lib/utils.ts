@@ -15,6 +15,28 @@ export function formatPrice(amount: number, currency = "USD") {
   }).format(amount);
 }
 
+/** Display form: (212) 555-0100 */
+export const US_PHONE_PATTERN = /^\(\d{3}\) \d{3}-\d{4}$/;
+
+export function formatUsPhone(value: string) {
+  let digits = value.replace(/\D/g, "");
+  if (digits.length === 11 && digits.startsWith("1")) digits = digits.slice(1);
+  digits = digits.slice(0, 10);
+  const area = digits.slice(0, 3);
+  const prefix = digits.slice(3, 6);
+  const line = digits.slice(6, 10);
+  if (digits.length === 0) return "";
+  if (digits.length < 3) return `(${area}`;
+  if (digits.length === 3) return `(${area}) `;
+  if (digits.length < 6) return `(${area}) ${prefix}`;
+  if (digits.length === 6) return `(${area}) ${prefix}-`;
+  return `(${area}) ${prefix}-${line}`;
+}
+
+export function isUsPhone(value: string) {
+  return US_PHONE_PATTERN.test(value.trim());
+}
+
 export function formatAbv(abv: number) {
   return `${abv}% ABV`;
 }

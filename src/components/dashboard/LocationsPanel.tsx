@@ -9,8 +9,9 @@ import {
   apiPatchLocation,
 } from "@/lib/api-mutations";
 import { hasPermission } from "@/lib/auth/permissions";
-import { accessibleLocations } from "@/lib/auth/location-access";
+import { accessibleLocations, hasAllLocationAccess } from "@/lib/auth/location-access";
 import {
+  isDbConnected,
   removeRuntimeLocation,
   upsertRuntimeLocation,
 } from "@/lib/runtime-data";
@@ -32,6 +33,11 @@ type LocationForm = {
   phone: string;
   email: string;
   description: string;
+  parking: string;
+  pickupAvailable: boolean;
+  deliveryRadiusKm: string;
+  lat: string;
+  lng: string;
   heroImage: string;
   gallery: string[];
 };
@@ -46,9 +52,64 @@ const emptyForm = (): LocationForm => ({
   phone: "",
   email: "",
   description: "",
+  parking: "",
+  pickupAvailable: true,
+  deliveryRadiusKm: "8",
+  lat: "",
+  lng: "",
   heroImage: "",
   gallery: [],
 });
+
+function validateLocationForm(form: LocationForm) {
+  if (form.name.trim().length < 2) return "Enter the full store name.";
+  if (form.shortName.trim().length < 2) return "Enter a short name.";
+  if (form.address.trim().length < 3) return "Enter a street address.";
+  if (form.city.trim().length < 2) return "Enter a city.";
+  if (form.state.trim().length < 2) return "Enter a state.";
+  if (!/^\d{5}(-\d{4})?$/.test(form.zip.trim())) return "Enter a valid ZIP code.";
+  if (form.phone.trim().length < 7) return "Enter a phone number.";
+  if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(form.email.trim())) return "Enter a valid email.";
+  const radius = Number(form.deliveryRadiusKm);
+  if (form.deliveryRadiusKm.trim() && (!Number.isFinite(radius) || radius < 0 || radius > 200)) {
+    return "Delivery radius must be between 0 and 200 km.";
+  }
+  if (form.lat.trim()) {
+    const lat = Number(form.lat);
+    if (!Number.isFinite(lat) || lat < -90 || lat > 90) return "Latitude must be between -90 and 90.";
+  }
+  if (form.lng.trim()) {
+    const lng = Number(form.lng);
+    if (!Number.isFinite(lng) || lng < -180 || lng > 180) {
+      return "Longitude must be between -180 and 180.";
+    }
+  }
+  return null;
+}
+
+function toLocationPayload(form: LocationForm) {
+  const radius = Number(form.deliveryRadiusKm);
+  const lat = form.lat.trim() ? Number(form.lat) : undefined;
+  const lng = form.lng.trim() ? Number(form.lng) : undefined;
+  return {
+    name: form.name.trim(),
+    shortName: form.shortName.trim(),
+    address: form.address.trim(),
+    city: form.city.trim(),
+    state: form.state.trim(),
+    zip: form.zip.trim(),
+    phone: form.phone.trim(),
+    email: form.email.trim(),
+    description: form.description.trim(),
+    parking: form.parking.trim(),
+    pickupAvailable: form.pickupAvailable,
+    deliveryRadiusKm: Number.isFinite(radius) ? radius : 8,
+    heroImage: form.heroImage.trim(),
+    gallery: form.gallery,
+    ...(lat != null && Number.isFinite(lat) ? { lat } : {}),
+    ...(lng != null && Number.isFinite(lng) ? { lng } : {}),
+  };
+}
 
 export function LocationsPanel() {
   const actor = useUserStore((s) => s.profile);
@@ -75,9 +136,10 @@ export function LocationsPanel() {
   const [form, setForm] = useState<LocationForm>(emptyForm());
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState("");
-  const canCreate = hasPermission(actor, "locations.create");
-  const canEdit = hasPermission(actor, "locations.edit");
-  const canDelete = hasPermission(actor, "locations.delete");
+  const dbReady = isDbConnected();
+  const canCreate = hasPermission(actor, "locations.create") && dbReady;
+  const canEdit = hasPermission(actor, "locations.edit") && dbReady;
+  const canDelete = hasPermission(actor, "locations.delete") && dbReady;
 
   const openCreate = () => {
     setForm(emptyForm());
@@ -96,6 +158,11 @@ export function LocationsPanel() {
       phone: location.phone,
       email: location.email,
       description: location.description,
+      parking: location.parking ?? "",
+      pickupAvailable: location.pickupAvailable,
+      deliveryRadiusKm: String(location.deliveryRadiusKm ?? 8),
+      lat: location.lat != null ? String(location.lat) : "",
+      lng: location.lng != null ? String(location.lng) : "",
       heroImage: location.heroImage,
       gallery: location.gallery.filter((url) => url !== location.heroImage),
     });
@@ -105,14 +172,27 @@ export function LocationsPanel() {
 
   const save = async (event: FormEvent) => {
     event.preventDefault();
+    const validationError = validateLocationForm(form);
+    if (validationError) {
+      setError(validationError);
+      return;
+    }
     setBusy(true);
     setError("");
     try {
+      const payload = toLocationPayload(form);
       if (editing === "new") {
-        const { location } = await apiCreateLocation(form);
+        const { location } = await apiCreateLocation(payload);
         upsertRuntimeLocation(location);
+        // Keep scoped accounts able to see the store they just created.
+        if (!hasAllLocationAccess(actor) && actor.allowedLocationIds?.length) {
+          const next = [...new Set([...actor.allowedLocationIds, location.id])];
+          useUserStore.setState((state) => ({
+            profile: { ...state.profile, allowedLocationIds: next },
+          }));
+        }
       } else if (editing) {
-        const { location } = await apiPatchLocation(editing.id, form);
+        const { location } = await apiPatchLocation(editing.id, payload);
         upsertRuntimeLocation(location);
       }
       setEditing(null);
@@ -128,6 +208,7 @@ export function LocationsPanel() {
     if (!window.confirm(`Remove ${location.shortName}? Events at this store will also be deleted.`)) {
       return;
     }
+    setBusy(true);
     setError("");
     try {
       await apiDeleteLocation(location.id);
@@ -135,6 +216,8 @@ export function LocationsPanel() {
       setTick((n) => n + 1);
     } catch (err) {
       setError(err instanceof Error ? err.message : "Could not remove store.");
+    } finally {
+      setBusy(false);
     }
   };
 
@@ -152,10 +235,15 @@ export function LocationsPanel() {
           </Button>
         ) : null}
       </div>
+      {!dbReady ? (
+        <p className="mt-4 text-sm text-amber-200/90">
+          Connect the database to add, edit, or remove stores. Seed locations are view-only in demo mode.
+        </p>
+      ) : null}
       {error ? <p className="mt-4 text-sm text-red-300">{error}</p> : null}
 
       <MobileSortBar
-        className="mt-5 md:hidden"
+        className="mt-5 lg:hidden"
         columns={[
           { key: "store", label: "Store" },
           { key: "address", label: "Address" },
@@ -165,7 +253,7 @@ export function LocationsPanel() {
         sortDir={sortDir}
         onSort={toggleSort}
       />
-      <ul className="mt-3 divide-y divide-white/10 border border-white/10 md:hidden">
+      <ul className="mt-3 divide-y divide-white/10 border border-white/10 lg:hidden">
         {sortedLocations.map((location) => (
           <li key={location.id} className="p-4">
             <div className="flex items-start gap-3">
@@ -190,7 +278,13 @@ export function LocationsPanel() {
                     </Button>
                   ) : null}
                   {canDelete ? (
-                    <Button size="sm" variant="secondary" className="h-9 px-2.5" onClick={() => void remove(location)}>
+                    <Button
+                      size="sm"
+                      variant="secondary"
+                      className="h-9 px-2.5"
+                      onClick={() => void remove(location)}
+                      disabled={busy}
+                    >
                       <Trash2 size={13} />
                       Remove
                     </Button>
@@ -202,13 +296,13 @@ export function LocationsPanel() {
         ))}
       </ul>
       {locations.length === 0 ? (
-        <div className="mt-3 border border-white/10 px-4 py-14 text-center text-sm text-muted md:hidden">
+        <div className="mt-3 border border-white/10 px-4 py-14 text-center text-sm text-muted lg:hidden">
           <MapPin className="mx-auto mb-3 text-gold/70" size={28} />
           No stores assigned to this account.
         </div>
       ) : null}
 
-      <div className={`mt-5 hidden md:block ${tableWrapClass}`}>
+      <div className={`mt-5 hidden lg:block ${tableWrapClass}`}>
         <table className="w-full min-w-[720px] text-left text-sm">
           <thead>
             <tr className={tableHeadRowClass}>
@@ -252,7 +346,13 @@ export function LocationsPanel() {
                       </Button>
                     ) : null}
                     {canDelete ? (
-                      <Button size="sm" variant="secondary" className="h-8 px-2.5" onClick={() => void remove(location)}>
+                      <Button
+                        size="sm"
+                        variant="secondary"
+                        className="h-8 px-2.5"
+                        onClick={() => void remove(location)}
+                        disabled={busy}
+                      >
                         <Trash2 size={13} />
                         Remove
                       </Button>
@@ -289,42 +389,147 @@ export function LocationsPanel() {
           <GalleryImageUpload
             className="sm:col-span-2"
             label="Interior gallery"
-            hint="Extra photos for the location page. Up to 6."
+            hint="Extra photos for the location page. Up to 8."
             value={form.gallery}
             onChange={(gallery) => setForm((f) => ({ ...f, gallery }))}
-            max={6}
+            max={8}
           />
           <label className="block text-xs text-muted sm:col-span-2">
             Full name
-            <Input className="mt-1" value={form.name} onChange={(e) => setForm((f) => ({ ...f, name: e.target.value }))} required />
+            <Input
+              className="mt-1"
+              value={form.name}
+              onChange={(e) => setForm((f) => ({ ...f, name: e.target.value }))}
+              required
+              minLength={2}
+            />
           </label>
           <label className="block text-xs text-muted">
             Short name
-            <Input className="mt-1" value={form.shortName} onChange={(e) => setForm((f) => ({ ...f, shortName: e.target.value }))} required />
+            <Input
+              className="mt-1"
+              value={form.shortName}
+              onChange={(e) => setForm((f) => ({ ...f, shortName: e.target.value }))}
+              required
+              minLength={2}
+            />
           </label>
           <label className="block text-xs text-muted">
             Phone
-            <Input className="mt-1" value={form.phone} onChange={(e) => setForm((f) => ({ ...f, phone: e.target.value }))} required />
+            <Input
+              className="mt-1"
+              value={form.phone}
+              onChange={(e) => setForm((f) => ({ ...f, phone: e.target.value }))}
+              required
+              minLength={7}
+            />
           </label>
           <label className="block text-xs text-muted sm:col-span-2">
             Address
-            <Input className="mt-1" value={form.address} onChange={(e) => setForm((f) => ({ ...f, address: e.target.value }))} required />
+            <Input
+              className="mt-1"
+              value={form.address}
+              onChange={(e) => setForm((f) => ({ ...f, address: e.target.value }))}
+              required
+              minLength={3}
+            />
           </label>
           <label className="block text-xs text-muted">
             City
-            <Input className="mt-1" value={form.city} onChange={(e) => setForm((f) => ({ ...f, city: e.target.value }))} required />
+            <Input
+              className="mt-1"
+              value={form.city}
+              onChange={(e) => setForm((f) => ({ ...f, city: e.target.value }))}
+              required
+              minLength={2}
+            />
           </label>
           <label className="block text-xs text-muted">
             State
-            <Input className="mt-1" value={form.state} onChange={(e) => setForm((f) => ({ ...f, state: e.target.value }))} required />
+            <Input
+              className="mt-1"
+              value={form.state}
+              onChange={(e) => setForm((f) => ({ ...f, state: e.target.value }))}
+              required
+              minLength={2}
+            />
           </label>
           <label className="block text-xs text-muted">
             ZIP
-            <Input className="mt-1" value={form.zip} onChange={(e) => setForm((f) => ({ ...f, zip: e.target.value }))} required />
+            <Input
+              className="mt-1"
+              value={form.zip}
+              onChange={(e) => setForm((f) => ({ ...f, zip: e.target.value }))}
+              required
+              pattern="\d{5}(-\d{4})?"
+            />
           </label>
           <label className="block text-xs text-muted">
             Email
-            <Input className="mt-1" type="email" value={form.email} onChange={(e) => setForm((f) => ({ ...f, email: e.target.value }))} required />
+            <Input
+              className="mt-1"
+              type="email"
+              value={form.email}
+              onChange={(e) => setForm((f) => ({ ...f, email: e.target.value }))}
+              required
+            />
+          </label>
+          <label className="block text-xs text-muted sm:col-span-2">
+            Parking notes
+            <Input
+              className="mt-1"
+              value={form.parking}
+              onChange={(e) => setForm((f) => ({ ...f, parking: e.target.value }))}
+              placeholder="Street parking nearby"
+            />
+          </label>
+          <label className="flex min-h-11 items-center gap-3 text-sm text-cream sm:col-span-2">
+            <input
+              type="checkbox"
+              className="h-5 w-5 accent-(--gold)"
+              checked={form.pickupAvailable}
+              onChange={(e) => setForm((f) => ({ ...f, pickupAvailable: e.target.checked }))}
+            />
+            Pickup available at this store
+          </label>
+          <label className="block text-xs text-muted">
+            Delivery radius (km)
+            <Input
+              className="mt-1"
+              type="number"
+              min={0}
+              max={200}
+              step={0.5}
+              value={form.deliveryRadiusKm}
+              onChange={(e) => setForm((f) => ({ ...f, deliveryRadiusKm: e.target.value }))}
+            />
+          </label>
+          <label className="block text-xs text-muted">
+            Latitude
+            <Input
+              className="mt-1"
+              type="number"
+              step="any"
+              min={-90}
+              max={90}
+              value={form.lat}
+              onChange={(e) => setForm((f) => ({ ...f, lat: e.target.value }))}
+              placeholder="40.7209"
+            />
+            <span className="mt-1 block text-[10px] text-muted/80">Used for the public map pin. Defaults to NYC if blank.</span>
+          </label>
+          <label className="block text-xs text-muted">
+            Longitude
+            <Input
+              className="mt-1"
+              type="number"
+              step="any"
+              min={-180}
+              max={180}
+              value={form.lng}
+              onChange={(e) => setForm((f) => ({ ...f, lng: e.target.value }))}
+              placeholder="-74.0007"
+            />
           </label>
           <label className="block text-xs text-muted sm:col-span-2">
             Description

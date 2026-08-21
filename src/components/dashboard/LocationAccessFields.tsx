@@ -33,10 +33,10 @@ export function LocationAccessFields({ actor, role, value, onChange, locked }: P
           Limit this person to specific stores for inventory, events, and analytics. All stores is the default.
         </p>
       </div>
-      <label className="flex items-center gap-2 text-sm text-cream">
+      <label className="flex min-h-11 items-center gap-3 text-sm text-cream">
         <input
           type="checkbox"
-          className="h-4 w-4 accent-(--gold)"
+          className="h-5 w-5 accent-(--gold)"
           checked={all}
           disabled={locked}
           onChange={(event) => onChange(event.target.checked ? null : stores.map((store) => store.id))}
@@ -50,10 +50,10 @@ export function LocationAccessFields({ actor, role, value, onChange, locked }: P
         <ul className="grid gap-2 sm:grid-cols-2">
           {stores.map((store) => (
             <li key={store.id}>
-              <label className="flex items-center gap-2 text-sm text-cream">
+              <label className="flex min-h-11 items-center gap-3 text-sm text-cream">
                 <input
                   type="checkbox"
-                  className="h-4 w-4 accent-(--gold)"
+                  className="h-5 w-5 accent-(--gold)"
                   checked={selected.has(store.id)}
                   disabled={locked}
                   onChange={() => {

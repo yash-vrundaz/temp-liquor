@@ -8,6 +8,7 @@ import type { Product } from "@/types";
 import { formatPrice } from "@/lib/utils";
 import { useWishlistStore } from "@/store/wishlist";
 import { useCartStore } from "@/store/cart";
+import { addToCart } from "@/lib/add-to-cart";
 import { useBranchStore } from "@/store/branch";
 import { useInventoryStore } from "@/store/inventory";
 import { getLocationById, getPriceForLocation } from "@/data/locations";
@@ -30,7 +31,6 @@ export function ProductCard({
 }) {
   const toggle = useWishlistStore((s) => s.toggle);
   const wished = useWishlistStore((s) => s.ids.includes(product.id));
-  const addItem = useCartStore((s) => s.addItem);
   const cartQty = useCartStore(
     (s) => s.items.find((i) => i.productId === product.id)?.quantity ?? 0,
   );
@@ -54,6 +54,11 @@ export function ProductCard({
       className="group relative flex h-full flex-col"
     >
       <div className="relative mb-3 aspect-[3/4] shrink-0 overflow-hidden bg-gradient-to-b from-[#1a1610] to-[#0a0a0a] sm:mb-4">
+        <Link
+          href={`/products/${product.slug}`}
+          className="absolute inset-0 z-[1]"
+          aria-label={product.name}
+        />
         <div
           className="absolute inset-0 opacity-40 transition duration-700 group-hover:opacity-70"
           style={{
@@ -82,9 +87,13 @@ export function ProductCard({
             </Badge>
           )}
         </div>
-        <div className="absolute right-1.5 top-1.5 flex flex-col gap-1.5 opacity-100 transition sm:right-2 sm:top-2 sm:gap-2 md:right-3 md:top-3 md:opacity-0 md:group-hover:opacity-100 md:group-focus-within:opacity-100">
+        <div className="absolute right-1.5 top-1.5 z-[2] flex flex-col gap-1.5 opacity-100 transition sm:right-2 sm:top-2 sm:gap-2 md:right-3 md:top-3 md:opacity-0 md:group-hover:opacity-100 md:group-focus-within:opacity-100">
           <button
-            onClick={() => toggle(product.id)}
+            onClick={(e) => {
+              e.preventDefault();
+              e.stopPropagation();
+              toggle(product.id);
+            }}
             className={cn(
               "rounded-sm bg-black/50 p-2.5 backdrop-blur touch-manipulation sm:p-2",
               wished ? "text-[var(--gold)]" : "text-white",
@@ -95,6 +104,7 @@ export function ProductCard({
           </button>
           <Link
             href={`/ar/${product.slug}`}
+            onClick={(e) => e.stopPropagation()}
             className="rounded-sm bg-black/50 p-2.5 text-white backdrop-blur touch-manipulation sm:p-2"
             aria-label="View in AR"
           >
@@ -163,7 +173,7 @@ export function ProductCard({
               if (locationId && locationId !== selectedBranch) {
                 useBranchStore.getState().setBranch(locationId);
               }
-              addItem(product.id);
+              addToCart(product.id);
             }}
           >
             Add to Cart

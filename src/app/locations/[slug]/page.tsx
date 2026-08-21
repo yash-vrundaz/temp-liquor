@@ -4,16 +4,20 @@ import { notFound, useParams } from "next/navigation";
 import { SmartImage } from "@/components/ui/SmartImage";
 import { getLocationBySlug } from "@/data/locations";
 import { products } from "@/data/products";
-import { getAllEvents } from "@/data/events";
+import { usePublicEvents } from "@/hooks/useRuntimeEvents";
+import { useRuntimeLocations } from "@/hooks/useRuntimeLocations";
 import { ProductCard } from "@/components/product/ProductCard";
 import { Button } from "@/components/ui/Button";
 import Link from "next/link";
 import { useBranchStore } from "@/store/branch";
+import { useMemo } from "react";
 
 export default function LocationDetailPage() {
   const { slug } = useParams<{ slug: string }>();
-  const loc = getLocationBySlug(slug);
+  const locations = useRuntimeLocations();
+  const loc = useMemo(() => locations.find((l) => l.slug === slug), [locations, slug]);
   const setBranch = useBranchStore((s) => s.setBranch);
+  const publicEvents = usePublicEvents();
 
   if (!loc) {
     notFound();
@@ -21,7 +25,7 @@ export default function LocationDetailPage() {
 
   const featuredIds = loc.inventory.filter((i) => i.featured).map((i) => i.productId);
   const featured = products.filter((p) => featuredIds.includes(p.id)).slice(0, 4);
-  const locEvents = getAllEvents().filter((e) => e.locationId === loc.id);
+  const locEvents = publicEvents.filter((e) => e.locationId === loc.id);
 
   return (
     <div>

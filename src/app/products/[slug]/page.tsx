@@ -8,6 +8,7 @@ import { getProductBySlug, getSimilarProducts } from "@/data/products";
 import { getReviewsForProduct } from "@/data/events";
 import { formatPrice } from "@/lib/utils";
 import { useCartStore } from "@/store/cart";
+import { addToCart } from "@/lib/add-to-cart";
 import { useWishlistStore } from "@/store/wishlist";
 import { useUserStore } from "@/store/user";
 import { useBranchStore } from "@/store/branch";
@@ -37,7 +38,6 @@ export default function ProductDetailPage() {
   const [tab, setTab] = useState<"story" | "tech" | "cocktails" | "reviews">("story");
   const [activeImage, setActiveImage] = useState(0);
   const [mediaMode, setMediaMode] = useState<"photo" | "3d">("photo");
-  const addItem = useCartStore((s) => s.addItem);
   const cartQty = useCartStore((s) =>
     product ? (s.items.find((i) => i.productId === product.id)?.quantity ?? 0) : 0,
   );
@@ -256,7 +256,7 @@ export default function ProductDetailPage() {
               size="lg"
               className="w-full sm:w-auto"
               disabled={outOfStock || atCartMax}
-              onClick={() => addItem(product.id, addQty)}
+              onClick={() => addToCart(product.id, addQty)}
             >
               {outOfStock
                 ? "Out of stock here"
@@ -276,7 +276,7 @@ export default function ProductDetailPage() {
                 className="w-full"
                 disabled={outOfStock && cartQty === 0}
                 onClick={() => {
-                  if (remaining > 0) addItem(product.id, addQty);
+                  if (remaining > 0) addToCart(product.id, addQty);
                 }}
               >
                 Buy Now

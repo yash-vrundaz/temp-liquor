@@ -16,6 +16,7 @@ import {
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { useCartStore } from "@/store/cart";
+import { useCartFeedbackStore } from "@/store/cart-feedback";
 import { useBranchStore } from "@/store/branch";
 import { useUserStore } from "@/store/user";
 import { isStaffRole } from "@/lib/auth/roles";
@@ -43,6 +44,7 @@ export function Header() {
   const [query, setQuery] = useState("");
   const [listening, setListening] = useState(false);
   const count = useCartStore((s) => s.items.reduce((n, i) => n + i.quantity, 0));
+  const cartBump = useCartFeedbackStore((s) => s.bump);
   const branchId = useBranchStore((s) => s.branchId);
   const setBranch = useBranchStore((s) => s.setBranch);
   const isLoggedIn = useUserStore((s) => s.isLoggedIn);
@@ -262,7 +264,10 @@ export function Header() {
             >
               <ShoppingBag size={18} />
               {count > 0 && (
-                <span className="absolute right-0.5 top-0.5 flex h-4 min-w-4 items-center justify-center rounded-full bg-[var(--gold)] px-1 text-[10px] font-medium text-black">
+                <span
+                  key={cartBump || count}
+                  className="absolute right-0.5 top-0.5 flex h-4 min-w-4 animate-[pulse_0.7s_ease-out] items-center justify-center rounded-full bg-[var(--gold)] px-1 text-[10px] font-medium text-black"
+                >
                   {count}
                 </span>
               )}
@@ -332,7 +337,7 @@ export function Header() {
                   value={query}
                   onChange={(e) => setQuery(e.target.value)}
                   placeholder="Search bottles, brands…"
-                  className="min-w-0 flex-1 bg-transparent text-base text-[var(--cream)] outline-none placeholder:text-[var(--muted)] sm:text-lg"
+                  className="min-w-0 flex-1 bg-transparent text-base text-[var(--cream)] outline-none placeholder:italic placeholder:text-[var(--placeholder)] sm:text-lg"
                   aria-label="Search products"
                 />
                 <button

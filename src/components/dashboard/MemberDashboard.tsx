@@ -2,7 +2,7 @@
 
 import { useCallback, useEffect, useMemo, useState } from "react";
 import Link from "next/link";
-import { notFound, usePathname, useRouter, useSearchParams } from "next/navigation";
+import { usePathname, useRouter, useSearchParams } from "next/navigation";
 import { AnimatePresence, motion } from "framer-motion";
 import {
   Area,
@@ -29,8 +29,8 @@ import {
   MapPin,
   Package,
   Sparkles,
-  Tags,
   TrendingUp,
+  Truck,
   UserRound,
   Users,
   Wine,
@@ -46,8 +46,8 @@ import { ActivityLogsPanel } from "@/components/dashboard/ActivityLogsPanel";
 import { UsersPanel } from "@/components/dashboard/UsersPanel";
 import { LocationsPanel } from "@/components/dashboard/LocationsPanel";
 import { EventsPanel } from "@/components/dashboard/EventsPanel";
-import { CategoriesPanel } from "@/components/dashboard/CategoriesPanel";
 import { ProfilePanel } from "@/components/dashboard/ProfilePanel";
+import { DeliveriesPanel } from "@/components/dashboard/DeliveriesPanel";
 import { hasPermission, type Permission } from "@/lib/auth/permissions";
 import { accessibleLocations, canAccessLocation, hasAllLocationAccess } from "@/lib/auth/location-access";
 import { ROLE_LABELS } from "@/lib/auth/roles";
@@ -73,11 +73,11 @@ type LocationFilter = "all" | string;
 type DashboardTab =
   | "overview"
   | "inventory"
-  | "categories"
   | "locations"
   | "events"
   | "activity"
   | "users"
+  | "deliveries"
   | "profile";
 
 const DASHBOARD_TABS: {
@@ -88,9 +88,9 @@ const DASHBOARD_TABS: {
 }[] = [
   { id: "overview", label: "Overview", icon: TrendingUp, permission: "dashboard.overview" },
   { id: "inventory", label: "Inventory", icon: Package, permission: "inventory.view" },
-  { id: "categories", label: "Categories", icon: Tags, permission: "catalog.create" },
   { id: "locations", label: "Locations", icon: MapPin, permission: "locations.view" },
   { id: "events", label: "Events", icon: CalendarDays, permission: "events.view" },
+  { id: "deliveries", label: "Deliveries", icon: Truck, permission: "deliveries.view" },
   { id: "activity", label: "Activity", icon: ClipboardList, permission: "activity.view" },
   { id: "users", label: "Users", icon: Users, permission: "users.view" },
   { id: "profile", label: "Profile", icon: UserRound, permission: "dashboard.access" },
@@ -104,13 +104,6 @@ function canAccessDashboardTab(
   profile: Parameters<typeof hasPermission>[0],
   tab: (typeof DASHBOARD_TABS)[number],
 ) {
-  if (tab.id === "categories") {
-    return (
-      hasPermission(profile, "catalog.create") ||
-      hasPermission(profile, "catalog.edit") ||
-      hasPermission(profile, "catalog.delete")
-    );
-  }
   return hasPermission(profile, tab.permission);
 }
 
@@ -551,7 +544,7 @@ function SelectionDetails({
         <button
           type="button"
           onClick={onClear}
-          className="inline-flex items-center gap-1.5 border border-white/10 px-3 py-1.5 text-xs text-muted transition-colors hover:border-(--gold)/40 hover:text-cream"
+          className="inline-flex min-h-10 items-center gap-1.5 border border-white/10 px-3 py-2 text-xs text-muted transition-colors hover:border-(--gold)/40 hover:text-cream"
         >
           <X className="h-3.5 w-3.5" />
           Clear
@@ -745,11 +738,14 @@ export function MemberDashboard() {
     [profile],
   );
   const requestedTab = searchParams.get("tab");
+  const openCategoriesInInventory = requestedTab === "categories";
   const requestedTabAllowed =
     isDashboardTab(requestedTab) && tabs.some((tab) => tab.id === requestedTab);
-  const dashboardTab: DashboardTab = requestedTabAllowed
-    ? requestedTab
-    : (tabs[0]?.id ?? "overview");
+  const dashboardTab: DashboardTab = openCategoriesInInventory
+    ? "inventory"
+    : requestedTabAllowed
+      ? requestedTab
+      : (tabs[0]?.id ?? "overview");
   const stores = useMemo(() => accessibleLocations(profile), [profile]);
   const allowAllStores = hasAllLocationAccess(profile);
 
@@ -761,12 +757,29 @@ export function MemberDashboard() {
   }, [pathname, router, searchParams]);
 
   useEffect(() => {
+    const active = document.querySelector<HTMLElement>(
+      '[role="tablist"][aria-label="Dashboard sections"] [aria-selected="true"]',
+    );
+    active?.scrollIntoView({ inline: "nearest", block: "nearest", behavior: "smooth" });
+  }, [dashboardTab]);
+
+  useEffect(() => {
     if (canAccessLocation(profile, branchId)) {
       setLocationFilter(branchId);
       setSelection(null);
       setHoverKey(null);
     }
   }, [branchId, profile]);
+
+  useEffect(() => {
+    if (openCategoriesInInventory) {
+      router.replace("/dashboard?tab=inventory");
+      return;
+    }
+    if (requestedTab && !requestedTabAllowed) {
+      router.replace("/dashboard");
+    }
+  }, [openCategoriesInInventory, requestedTab, requestedTabAllowed, router]);
 
   useEffect(() => {
     if (locationFilter === "all") {
@@ -859,10 +872,6 @@ export function MemberDashboard() {
   const panelFor = (type: ChartSelection["type"]) =>
     selection?.type === type;
 
-  if (requestedTab && !requestedTabAllowed) {
-    notFound();
-  }
-
   return (
     <div className="relative overflow-x-clip">
       <div className="pointer-events-none absolute inset-0 ambient-bg opacity-80" />
@@ -875,8 +884,6 @@ export function MemberDashboard() {
               {ROLE_LABELS[profile.role]} ·{" "}
               {dashboardTab === "inventory"
                 ? "Inventory"
-                : dashboardTab === "categories"
-                  ? "Categories"
                 : dashboardTab === "activity"
                   ? "Activity"
                   : dashboardTab === "users"
@@ -885,6 +892,8 @@ export function MemberDashboard() {
                       ? "Locations"
                       : dashboardTab === "events"
                         ? "Events"
+                        : dashboardTab === "deliveries"
+                          ? "Deliveries"
                         : dashboardTab === "profile"
                           ? "Profile"
                           : "Store analytics"}
@@ -894,9 +903,7 @@ export function MemberDashboard() {
             </h1>
             <p className="mt-2 max-w-xl text-sm text-muted md:text-base">
               {dashboardTab === "inventory"
-                ? "Manage bottle counts, restock, and add products per store."
-                : dashboardTab === "categories"
-                  ? "Add, rename, or remove shop collections used on bottles."
+                ? "Manage bottle counts, categories, restock, and products per store."
                 : dashboardTab === "activity"
                   ? "Audit trail of who changed stock, orders, catalog, and account settings."
                   : dashboardTab === "users"
@@ -905,6 +912,8 @@ export function MemberDashboard() {
                       ? "Add, edit, or remove stores in the Sam’s network."
                       : dashboardTab === "events"
                         ? "Create and remove tastings, launches, and in-store events."
+                        : dashboardTab === "deliveries"
+                          ? "Assign store drivers and watch each delivery move from pickup to the door."
                         : dashboardTab === "profile"
                           ? "Update your photo, name, email, and password."
                 : isMobile
@@ -937,14 +946,14 @@ export function MemberDashboard() {
                     setLocation(stores.find((s) => s.id === branchId)?.id ?? stores[0]?.id ?? branchId);
                   }
                 }}
-                className={`inline-flex items-center gap-2 border-b-2 px-3 py-3 text-sm uppercase tracking-[0.14em] transition-colors sm:px-4 ${
+                className={`inline-flex min-h-11 items-center gap-2 border-b-2 px-3 py-3 text-xs uppercase tracking-[0.14em] transition-colors sm:px-4 sm:text-sm ${
                   active
                     ? "border-(--gold) text-cream"
                     : "border-transparent text-muted hover:text-cream"
                 }`}
               >
                 <Icon size={14} className={active ? "text-gold" : ""} />
-                {tab.label}
+                <span className="max-w-[7.5rem] truncate sm:max-w-none">{tab.label}</span>
               </button>
             );
           })}
@@ -955,13 +964,14 @@ export function MemberDashboard() {
             locationId={locationFilter}
             onLocationChange={setLocation}
             locations={stores}
+            initialView={openCategoriesInInventory ? "categories" : "stock"}
           />
-        ) : dashboardTab === "categories" ? (
-          <CategoriesPanel />
         ) : dashboardTab === "locations" ? (
           <LocationsPanel />
         ) : dashboardTab === "events" ? (
           <EventsPanel />
+        ) : dashboardTab === "deliveries" ? (
+          <DeliveriesPanel />
         ) : dashboardTab === "activity" ? (
           <ActivityLogsPanel />
         ) : dashboardTab === "users" ? (
@@ -1276,7 +1286,7 @@ export function MemberDashboard() {
                           label: c.name,
                         })
                       }
-                      className={`flex w-full items-center gap-2 rounded-sm px-1 py-0.5 text-left transition-all ${
+                      className={`flex min-h-10 w-full items-center gap-2 rounded-sm px-2 py-2 text-left transition-all ${
                         chartFocus && !selected && !hovered
                           ? "opacity-35"
                           : "opacity-100"
@@ -1667,7 +1677,7 @@ export function MemberDashboard() {
                       label: s.name,
                     })
                   }
-                  className={`inline-flex items-center gap-1.5 rounded-sm px-1.5 py-1 transition-all ${
+                  className={`inline-flex min-h-10 items-center gap-1.5 rounded-sm px-3 py-2 transition-all ${
                     chartFocus && !selected && !hovered
                       ? "opacity-35"
                       : "opacity-100"
@@ -1698,7 +1708,7 @@ export function MemberDashboard() {
                       label: f.name,
                     })
                   }
-                  className={`inline-flex items-center gap-1.5 rounded-sm px-1.5 py-1 transition-all ${
+                  className={`inline-flex min-h-10 items-center gap-1.5 rounded-sm px-3 py-2 transition-all ${
                     chartFocus && !selected && !hovered
                       ? "opacity-35"
                       : "opacity-100"
@@ -1733,7 +1743,7 @@ export function MemberDashboard() {
           }
         >
           <MobileSortBar
-            className="mb-3 md:hidden"
+            className="mb-3 lg:hidden"
             columns={[
               { key: "order", label: "Order" },
               { key: "date", label: "Date" },
@@ -1748,7 +1758,7 @@ export function MemberDashboard() {
             sortDir={orderSortDir}
             onSort={toggleOrderSort}
           />
-          <div className="space-y-2 md:hidden">
+          <div className="space-y-2 lg:hidden">
             {sortedOrders.length === 0 ? (
               <p className="py-8 text-center text-sm text-muted">
                 No orders for this location
@@ -1793,7 +1803,7 @@ export function MemberDashboard() {
                       {o.status !== "cancelled" && o.status !== "delivered" ? (
                         <button
                           type="button"
-                          className="text-[11px] uppercase tracking-wider text-muted hover:text-red-300"
+                          className="inline-flex min-h-10 items-center text-[11px] uppercase tracking-wider text-muted hover:text-red-300"
                           onClick={() => handleCancelOrder(o.id)}
                         >
                           Cancel · restock
@@ -1806,7 +1816,7 @@ export function MemberDashboard() {
             )}
           </div>
 
-          <div className={`-mx-1 hidden px-1 md:block ${tableWrapClass}`}>
+          <div className={`-mx-1 hidden px-1 lg:block ${tableWrapClass}`}>
             <table className="w-full min-w-140 text-left text-sm lg:min-w-160">
               <thead>
                 <tr className={tableHeadRowClass}>
@@ -1908,7 +1918,7 @@ export function MemberDashboard() {
                             {o.status !== "cancelled" && o.status !== "delivered" ? (
                               <button
                                 type="button"
-                                className="text-[10px] uppercase tracking-wider text-muted hover:text-red-300"
+                                className="inline-flex min-h-9 items-center text-[10px] uppercase tracking-wider text-muted hover:text-red-300"
                                 onClick={() => handleCancelOrder(o.id)}
                               >
                                 Cancel · restock

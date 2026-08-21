@@ -21,6 +21,7 @@ import { formatPrice } from "@/lib/utils";
 import Link from "next/link";
 import { Button } from "@/components/ui/Button";
 import { useCartStore } from "@/store/cart";
+import { addToCart } from "@/lib/add-to-cart";
 import { useBranchStore } from "@/store/branch";
 import { useInventoryStore } from "@/store/inventory";
 import { getPriceForLocation, getAllLocations } from "@/data/locations";
@@ -676,7 +677,6 @@ export function VirtualStoreExperience() {
   const [ready, setReady] = useState(false);
   const [shelfCount, setShelfCount] = useState(0);
   const [walk, setWalk] = useState(false);
-  const addItem = useCartStore((s) => s.addItem);
   const cartQty = useCartStore((s) =>
     selected
       ? (s.items.find((i) => i.productId === selected.id)?.quantity ?? 0)
@@ -893,7 +893,7 @@ export function VirtualStoreExperience() {
             <div className="mt-5 flex flex-col gap-2">
               <Button
                 disabled={selectedRemaining <= 0}
-                onClick={() => addItem(selected.id)}
+                onClick={() => addToCart(selected.id)}
               >
                 <ShoppingBag size={16} />
                 {selectedStock <= 0

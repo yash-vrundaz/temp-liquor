@@ -110,11 +110,13 @@ export async function apiPatchProduct(
 export async function apiPlaceOrder(input: {
   email: string;
   name: string;
+  phone?: string;
   userId?: string;
   locationId: string;
   fulfillment: Order["fulfillment"];
   items: { productId: string; quantity: number }[];
   coupon?: string | null;
+  delivery?: import("@/types").DeliveryAddress;
 }) {
   return apiFetch<{
     order: Order;
@@ -127,10 +129,10 @@ export async function apiPlaceOrder(input: {
   });
 }
 
-export async function apiCancelOrder(userId: string, orderId: string) {
+export async function apiCancelOrder(_userId: string, orderId: string) {
   return apiFetch<{ order: Order; inventory?: InventorySnapshot }>("/api/orders", {
     method: "PATCH",
-    body: JSON.stringify({ userId, orderId }),
+    body: JSON.stringify({ orderId }),
   });
 }
 
@@ -271,8 +273,12 @@ export async function apiCreateLocation(input: {
   email: string;
   description?: string;
   pickupAvailable?: boolean;
+  deliveryRadiusKm?: number;
+  parking?: string;
   heroImage?: string;
   gallery?: string[];
+  lat?: number;
+  lng?: number;
 }) {
   return apiFetch<{ location: import("@/types").StoreLocation }>("/api/locations", {
     method: "POST",
@@ -293,8 +299,12 @@ export async function apiPatchLocation(
     email: string;
     description: string;
     pickupAvailable: boolean;
+    deliveryRadiusKm: number;
+    parking: string;
     heroImage: string;
     gallery: string[];
+    lat: number;
+    lng: number;
   }>,
 ) {
   return apiFetch<{ location: import("@/types").StoreLocation }>("/api/locations", {
@@ -321,6 +331,7 @@ export async function apiCreateEvent(input: {
   seatsTotal: number;
   image?: string;
   hosts?: string[];
+  active?: boolean;
 }) {
   return apiFetch<{ event: import("@/types").EventItem }>("/api/events", {
     method: "PUT",
@@ -342,6 +353,7 @@ export async function apiPatchEvent(
     seatsTotal: number;
     image: string;
     hosts: string[];
+    active: boolean;
   }>,
 ) {
   return apiFetch<{ event: import("@/types").EventItem }>("/api/events", {
@@ -353,5 +365,26 @@ export async function apiPatchEvent(
 export async function apiDeleteEvent(eventId: string) {
   return apiFetch<{ ok: true; id: string }>(`/api/events?id=${encodeURIComponent(eventId)}`, {
     method: "DELETE",
+  });
+}
+
+export async function apiFetchDeliveries() {
+  return apiFetch<{ drivers: import("@/types").Driver[]; orders: Order[] }>("/api/deliveries");
+}
+
+export async function apiAssignDelivery(orderId: string, driverId: string) {
+  return apiFetch<{ orderId: string; driver: import("@/types").Driver }>("/api/deliveries", {
+    method: "PATCH",
+    body: JSON.stringify({ action: "assign", orderId, driverId }),
+  });
+}
+
+export async function apiUpdateDeliveryStatus(
+  orderId: string,
+  status: import("@/types").DeliveryStatus,
+) {
+  return apiFetch<{ orderId: string; status: import("@/types").DeliveryStatus }>("/api/deliveries", {
+    method: "PATCH",
+    body: JSON.stringify({ action: "status", orderId, status }),
   });
 }

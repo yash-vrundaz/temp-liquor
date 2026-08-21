@@ -44,7 +44,7 @@ export function Modal({ open, title, subtitle, onClose, children, className }: P
         aria-modal="true"
         aria-labelledby="modal-title"
         className={cn(
-          "relative z-10 flex max-h-[min(92dvh,820px)] w-full max-w-full flex-col rounded-t-xl border border-white/10 bg-(--bg-elevated) pb-[env(safe-area-inset-bottom,0px)] shadow-[0_24px_80px_rgba(0,0,0,0.55)] sm:rounded-sm sm:max-w-xl",
+          "relative z-10 flex max-h-[min(92dvh,820px)] w-full max-w-full flex-col rounded-t-xl border border-white/10 bg-(--bg-elevated) pt-[env(safe-area-inset-top,0px)] pb-[env(safe-area-inset-bottom,0px)] shadow-[0_24px_80px_rgba(0,0,0,0.55)] sm:rounded-sm sm:max-w-xl sm:pt-0",
           className,
         )}
       >
