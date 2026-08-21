@@ -33,7 +33,14 @@ export async function POST(request: Request) {
     if (error) return error;
     const parsed = locationWriteSchema.safeParse(await request.json());
     if (!parsed.success) {
-      return NextResponse.json({ error: "Store name, address, and contact details are required." }, { status: 400 });
+      return NextResponse.json(
+        {
+          error:
+            parsed.error.issues[0]?.message ||
+            "Store name, address, and contact details are required.",
+        },
+        { status: 400 },
+      );
     }
     const result = await createStoreLocation(user, parsed.data);
     if ("error" in result && result.error) {
@@ -52,7 +59,10 @@ export async function PATCH(request: Request) {
     if (error) return error;
     const parsed = locationPatchSchema.safeParse(await request.json());
     if (!parsed.success) {
-      return NextResponse.json({ error: "Invalid location update." }, { status: 400 });
+      return NextResponse.json(
+        { error: parsed.error.issues[0]?.message || "Invalid location update." },
+        { status: 400 },
+      );
     }
     const result = await updateStoreLocation(user, parsed.data.locationId, parsed.data.patch);
     if ("error" in result && result.error) {

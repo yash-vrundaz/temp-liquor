@@ -25,6 +25,8 @@ export const PERMISSIONS = [
   "events.create",
   "events.edit",
   "events.delete",
+  "deliveries.view",
+  "deliveries.manage",
 ] as const;
 
 export type Permission = (typeof PERMISSIONS)[number];
@@ -186,6 +188,18 @@ export const PERMISSION_META: Record<
     label: "Remove events",
     description: "Cancel and delete an event listing",
   },
+  "deliveries.view": {
+    group: "Deliveries",
+    kind: "read",
+    label: "View deliveries",
+    description: "See open deliveries, assigned drivers, and status",
+  },
+  "deliveries.manage": {
+    group: "Deliveries",
+    kind: "action",
+    label: "Assign drivers",
+    description: "Assign a store driver and update pickup, en route, and delivered",
+  },
 };
 
 export const ROLE_PERMISSIONS: Record<UserRole, readonly Permission[]> = {
@@ -199,6 +213,8 @@ export const ROLE_PERMISSIONS: Record<UserRole, readonly Permission[]> = {
     "activity.view",
     "locations.view",
     "events.view",
+    "deliveries.view",
+    "deliveries.manage",
   ],
   admin: [
     "dashboard.access",
@@ -220,10 +236,13 @@ export const ROLE_PERMISSIONS: Record<UserRole, readonly Permission[]> = {
     "locations.view",
     "locations.create",
     "locations.edit",
+    "locations.delete",
     "events.view",
     "events.create",
     "events.edit",
     "events.delete",
+    "deliveries.view",
+    "deliveries.manage",
   ],
   owner: PERMISSIONS,
 };
@@ -234,6 +253,7 @@ export const PERMISSION_GROUPS = [
   "Catalog",
   "Locations",
   "Events",
+  "Deliveries",
   "Activity",
   "Users",
 ] as const;

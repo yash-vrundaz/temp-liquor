@@ -21,6 +21,27 @@ let reviews: Review[] = [...seedReviews];
 let usersByEmail = new Map<string, UserProfile>();
 let dbConnected = false;
 let loaded = false;
+let catalogRevision = 0;
+
+type CatalogListener = () => void;
+const catalogListeners = new Set<CatalogListener>();
+
+function bumpCatalog() {
+  catalogRevision += 1;
+  catalogListeners.forEach((listener) => listener());
+}
+
+/** Subscribe to catalog mutations (locations/events/etc). Returns unsubscribe. */
+export function subscribeRuntimeCatalog(listener: CatalogListener) {
+  catalogListeners.add(listener);
+  return () => {
+    catalogListeners.delete(listener);
+  };
+}
+
+export function getRuntimeCatalogRevision() {
+  return catalogRevision;
+}
 
 export function isRuntimeDataLoaded() {
   return loaded;
@@ -42,7 +63,10 @@ export function hydrateRuntimeData(payload: {
   products = payload.products;
   locations = payload.locations;
   categories = payload.categories;
-  events = payload.events;
+  events = payload.events.map((event) => ({
+    ...event,
+    active: event.active !== false,
+  }));
   reviews = payload.reviews;
   dbConnected = payload.dbConnected ?? false;
   loaded = true;
@@ -50,6 +74,7 @@ export function hydrateRuntimeData(payload: {
   if (payload.users?.length) {
     usersByEmail = new Map(payload.users.map((u) => [u.email.toLowerCase(), u]));
   }
+  bumpCatalog();
 }
 
 export function getRuntimeProducts() {
@@ -122,10 +147,13 @@ export function upsertRuntimeLocation(location: StoreLocation) {
   } else {
     locations = [...locations, location];
   }
+  bumpCatalog();
 }
 
 export function removeRuntimeLocation(id: string) {
   locations = locations.filter((item) => item.id !== id);
+  events = events.filter((item) => item.locationId !== id);
+  bumpCatalog();
 }
 
 export function upsertRuntimeCategory(category: CategoryRow) {
@@ -148,14 +176,17 @@ export function upsertRuntimeEvent(event: EventItem) {
   } else {
     events = [...events, event];
   }
+  bumpCatalog();
 }
 
 export function removeRuntimeEvent(id: string) {
   events = events.filter((item) => item.id !== id);
+  bumpCatalog();
 }
 
 export function updateRuntimeEventSeats(eventId: string, seatsAvailable: number) {
   events = events.map((e) => (e.id === eventId ? { ...e, seatsAvailable } : e));
+  bumpCatalog();
 }
 
 export function isCatalogProductId(id: string) {

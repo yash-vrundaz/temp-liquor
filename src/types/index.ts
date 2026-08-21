@@ -95,7 +95,9 @@ export type ActivityAction =
   | "location.deleted"
   | "event.created"
   | "event.updated"
-  | "event.deleted";
+  | "event.deleted"
+  | "delivery.assigned"
+  | "delivery.status";
 
 export type ActivityEntityType =
   | "user"
@@ -105,7 +107,8 @@ export type ActivityEntityType =
   | "inventory"
   | "event"
   | "location"
-  | "profile";
+  | "profile"
+  | "delivery";
 
 export type ActivityLogEntry = {
   id: string;
@@ -163,6 +166,8 @@ export type EventItem = {
   seatsAvailable: number;
   image: string;
   hosts: string[];
+  /** When false, hidden from public event listings and booking pages. */
+  active: boolean;
 };
 
 export type Review = {
@@ -189,6 +194,38 @@ export type SavedItem = {
   savedAt: string;
 };
 
+export type DeliveryStatus =
+  | "unassigned"
+  | "assigned"
+  | "picked_up"
+  | "en_route"
+  | "delivered";
+
+export type DriverStatus = "available" | "on_route" | "offline";
+
+export type DeliveryAddress = {
+  name: string;
+  phone: string;
+  line1: string;
+  line2?: string;
+  city: string;
+  state: string;
+  zip: string;
+  notes?: string;
+};
+
+export type Driver = {
+  id: string;
+  name: string;
+  phone: string;
+  email?: string;
+  vehicle: string;
+  locationId: string;
+  status: DriverStatus;
+  active: boolean;
+  photoUrl?: string;
+};
+
 export type Order = {
   id: string;
   date: string;
@@ -198,6 +235,10 @@ export type Order = {
   fulfillment: "delivery" | "pickup";
   locationId: string;
   tracking?: string;
+  delivery?: DeliveryAddress;
+  deliveryStatus?: DeliveryStatus;
+  driverId?: string;
+  driver?: Driver;
 };
 
 export type UserRole = "customer" | "staff" | "admin" | "owner";

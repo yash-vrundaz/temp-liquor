@@ -82,7 +82,14 @@ function LoginForm() {
       </form>
       <p className="mt-5 text-center text-sm text-muted">
         New here?{" "}
-        <Link href="/signup" className="text-gold hover:underline">
+        <Link
+          href={
+            search.get("next")
+              ? `/signup?next=${encodeURIComponent(search.get("next")!)}`
+              : "/signup"
+          }
+          className="text-gold hover:underline"
+        >
           Create an account
         </Link>
       </p>

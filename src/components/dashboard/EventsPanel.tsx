@@ -2,7 +2,6 @@
 
 import { FormEvent, useMemo, useState } from "react";
 import { CalendarDays, Pencil, Plus, Trash2 } from "lucide-react";
-import { getAllEvents } from "@/data/events";
 import { getAllLocations, getLocationById } from "@/data/locations";
 import {
   apiCreateEvent,
@@ -11,7 +10,8 @@ import {
 } from "@/lib/api-mutations";
 import { hasPermission } from "@/lib/auth/permissions";
 import { accessibleLocations, canAccessLocation } from "@/lib/auth/location-access";
-import { removeRuntimeEvent, upsertRuntimeEvent } from "@/lib/runtime-data";
+import { isDbConnected, removeRuntimeEvent, upsertRuntimeEvent } from "@/lib/runtime-data";
+import { useRuntimeEvents } from "@/hooks/useRuntimeEvents";
 import { useUserStore } from "@/store/user";
 import type { EventItem } from "@/types";
 import { Button } from "@/components/ui/Button";
@@ -41,15 +41,36 @@ type EventForm = {
   seatsTotal: string;
   hosts: string;
   image: string;
+  active: boolean;
 };
+
+function localToday() {
+  const now = new Date();
+  const offset = now.getTimezoneOffset();
+  return new Date(now.getTime() - offset * 60_000).toISOString().slice(0, 10);
+}
+
+function validateEventForm(form: EventForm) {
+  if (form.title.trim().length < 3) return "Enter a title with at least 3 characters.";
+  if (form.description.trim().length < 8) return "Enter a description with at least 8 characters.";
+  if (!form.locationId) return "Choose a store.";
+  if (!/^\d{4}-\d{2}-\d{2}$/.test(form.date)) return "Pick a valid date.";
+  if (!form.startTime || !form.endTime) return "Start and end times are required.";
+  if (form.endTime <= form.startTime) return "End time must be after start time.";
+  const price = Number(form.price);
+  if (!Number.isFinite(price) || price < 0) return "Enter a valid price.";
+  const seats = Number(form.seatsTotal);
+  if (!Number.isInteger(seats) || seats < 1) return "Seats must be a whole number of at least 1.";
+  return null;
+}
 
 export function EventsPanel() {
   const actor = useUserStore((s) => s.profile);
   const stores = accessibleLocations(actor, getAllLocations());
-  const [tick, setTick] = useState(0);
+  const allEvents = useRuntimeEvents();
   const events = useMemo(
-    () => getAllEvents().filter((event) => canAccessLocation(actor, event.locationId)),
-    [actor, tick],
+    () => allEvents.filter((event) => canAccessLocation(actor, event.locationId)),
+    [actor, allEvents],
   );
   const { sortKey, sortDir, toggleSort } = useTableSort<"event" | "store" | "when" | "seats">(
     "when",
@@ -75,9 +96,10 @@ export function EventsPanel() {
   const [form, setForm] = useState<EventForm>(() => emptyEventForm(stores[0]?.id ?? ""));
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState("");
-  const canCreate = hasPermission(actor, "events.create");
-  const canEdit = hasPermission(actor, "events.edit");
-  const canDelete = hasPermission(actor, "events.delete");
+  const canCreate = hasPermission(actor, "events.create") && isDbConnected();
+  const canEdit = hasPermission(actor, "events.edit") && isDbConnected();
+  const canDelete = hasPermission(actor, "events.delete") && isDbConnected();
+  const dbReady = isDbConnected();
 
   const openCreate = () => {
     setForm(emptyEventForm(stores[0]?.id ?? ""));
@@ -98,30 +120,38 @@ export function EventsPanel() {
       seatsTotal: String(event.seatsTotal),
       hosts: event.hosts.join(", "),
       image: event.image,
+      active: event.active !== false,
     });
     setError("");
     setEditing(event);
   };
 
   const payload = () => ({
-    title: form.title,
+    title: form.title.trim(),
     type: form.type,
-    description: form.description,
+    description: form.description.trim(),
     locationId: form.locationId,
     date: form.date,
     startTime: form.startTime,
     endTime: form.endTime,
     price: Number(form.price) || 0,
-    seatsTotal: Number(form.seatsTotal) || 1,
+    seatsTotal: Math.floor(Number(form.seatsTotal) || 1),
     hosts: form.hosts
       .split(",")
       .map((host) => host.trim())
       .filter(Boolean),
-    image: form.image.trim() || undefined,
+    // Always send image so clearing the cover persists.
+    image: form.image.trim(),
+    active: form.active,
   });
 
   const save = async (event: FormEvent) => {
     event.preventDefault();
+    const validationError = validateEventForm(form);
+    if (validationError) {
+      setError(validationError);
+      return;
+    }
     setBusy(true);
     setError("");
     try {
@@ -133,7 +163,6 @@ export function EventsPanel() {
         upsertRuntimeEvent(updated);
       }
       setEditing(null);
-      setTick((n) => n + 1);
     } catch (err) {
       setError(err instanceof Error ? err.message : "Could not save event.");
     } finally {
@@ -141,15 +170,30 @@ export function EventsPanel() {
     }
   };
 
+  const toggleActive = async (event: EventItem) => {
+    setBusy(true);
+    setError("");
+    try {
+      const { event: updated } = await apiPatchEvent(event.id, { active: event.active === false });
+      upsertRuntimeEvent(updated);
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Could not update event visibility.");
+    } finally {
+      setBusy(false);
+    }
+  };
+
   const remove = async (event: EventItem) => {
     if (!window.confirm(`Remove “${event.title}”?`)) return;
+    setBusy(true);
     setError("");
     try {
       await apiDeleteEvent(event.id);
       removeRuntimeEvent(event.id);
-      setTick((n) => n + 1);
     } catch (err) {
       setError(err instanceof Error ? err.message : "Could not remove event.");
+    } finally {
+      setBusy(false);
     }
   };
 
@@ -167,10 +211,15 @@ export function EventsPanel() {
           </Button>
         ) : null}
       </div>
+      {!dbReady ? (
+        <p className="mt-4 text-sm text-amber-200/90">
+          Connect the database to add, edit, or remove events. Seed events are view-only in demo mode.
+        </p>
+      ) : null}
       {error ? <p className="mt-4 text-sm text-red-300">{error}</p> : null}
 
       <MobileSortBar
-        className="mt-5 md:hidden"
+        className="mt-5 lg:hidden"
         columns={[
           { key: "event", label: "Event" },
           { key: "store", label: "Store" },
@@ -181,7 +230,7 @@ export function EventsPanel() {
         sortDir={sortDir}
         onSort={toggleSort}
       />
-      <ul className="mt-3 divide-y divide-white/10 border border-white/10 md:hidden">
+      <ul className="mt-3 divide-y divide-white/10 border border-white/10 lg:hidden">
         {sortedEvents.map((event) => (
           <li key={event.id} className="p-4">
             <div className="flex items-start gap-3">
@@ -193,6 +242,10 @@ export function EventsPanel() {
                 <p className="font-medium text-cream">{event.title}</p>
                 <p className="text-xs text-muted">
                   {EVENT_TYPES.find((item) => item.value === event.type)?.label} · {formatPrice(event.price)}
+                  {" · "}
+                  <span className={event.active !== false ? "text-emerald-300/90" : "text-amber-200/90"}>
+                    {event.active !== false ? "Active" : "Inactive"}
+                  </span>
                 </p>
                 <p className="mt-2 text-xs text-muted">
                   {getLocationById(event.locationId)?.shortName ?? event.locationId}
@@ -202,13 +255,24 @@ export function EventsPanel() {
                 </p>
                 <div className="mt-3 flex flex-wrap gap-2">
                   {canEdit ? (
+                    <Button
+                      size="sm"
+                      variant="ghost"
+                      className="h-9 px-2.5"
+                      onClick={() => void toggleActive(event)}
+                      disabled={busy}
+                    >
+                      {event.active !== false ? "Hide" : "Show"}
+                    </Button>
+                  ) : null}
+                  {canEdit ? (
                     <Button size="sm" variant="ghost" className="h-9 px-2.5" onClick={() => openEdit(event)}>
                       <Pencil size={13} />
                       Edit
                     </Button>
                   ) : null}
                   {canDelete ? (
-                    <Button size="sm" variant="secondary" className="h-9 px-2.5" onClick={() => void remove(event)}>
+                    <Button size="sm" variant="secondary" className="h-9 px-2.5" onClick={() => void remove(event)} disabled={busy}>
                       <Trash2 size={13} />
                       Remove
                     </Button>
@@ -220,13 +284,13 @@ export function EventsPanel() {
         ))}
       </ul>
       {events.length === 0 ? (
-        <div className="mt-3 border border-white/10 px-4 py-14 text-center text-sm text-muted md:hidden">
+        <div className="mt-3 border border-white/10 px-4 py-14 text-center text-sm text-muted lg:hidden">
           <CalendarDays className="mx-auto mb-3 text-gold/70" size={28} />
           No events for the stores you can access.
         </div>
       ) : null}
 
-      <div className={`mt-5 hidden md:block ${tableWrapClass}`}>
+      <div className={`mt-5 hidden lg:block ${tableWrapClass}`}>
         <table className="w-full min-w-[780px] text-left text-sm">
           <thead>
             <tr className={tableHeadRowClass}>
@@ -234,6 +298,7 @@ export function EventsPanel() {
               <SortableTh label="Store" column="store" sortKey={sortKey} sortDir={sortDir} onSort={toggleSort} />
               <SortableTh label="When" column="when" sortKey={sortKey} sortDir={sortDir} onSort={toggleSort} />
               <SortableTh label="Seats" column="seats" sortKey={sortKey} sortDir={sortDir} onSort={toggleSort} />
+              <th className="px-4 py-3 font-medium">Status</th>
               <th className="px-4 py-3 text-right font-medium">Actions</th>
             </tr>
           </thead>
@@ -264,7 +329,27 @@ export function EventsPanel() {
                   {event.seatsAvailable}/{event.seatsTotal}
                 </td>
                 <td className={tableCellClass}>
+                  <span
+                    className={`inline-block text-[10px] uppercase tracking-[0.14em] ${
+                      event.active !== false ? "text-emerald-300/90" : "text-amber-200/90"
+                    }`}
+                  >
+                    {event.active !== false ? "Active" : "Inactive"}
+                  </span>
+                </td>
+                <td className={tableCellClass}>
                   <div className="flex flex-nowrap justify-end gap-2">
+                    {canEdit ? (
+                      <Button
+                        size="sm"
+                        variant="ghost"
+                        className="h-8 px-2.5"
+                        onClick={() => void toggleActive(event)}
+                        disabled={busy}
+                      >
+                        {event.active !== false ? "Hide" : "Show"}
+                      </Button>
+                    ) : null}
                     {canEdit ? (
                       <Button size="sm" variant="ghost" className="h-8 px-2.5" onClick={() => openEdit(event)}>
                         <Pencil size={13} />
@@ -272,7 +357,7 @@ export function EventsPanel() {
                       </Button>
                     ) : null}
                     {canDelete ? (
-                      <Button size="sm" variant="secondary" className="h-8 px-2.5" onClick={() => void remove(event)}>
+                      <Button size="sm" variant="secondary" className="h-8 px-2.5" onClick={() => void remove(event)} disabled={busy}>
                         <Trash2 size={13} />
                         Remove
                       </Button>
@@ -295,7 +380,7 @@ export function EventsPanel() {
         open={Boolean(editing)}
         onClose={() => setEditing(null)}
         title={editing === "new" ? "Add event" : "Edit event"}
-        subtitle="Published events appear on the public events pages."
+        subtitle="Active events appear on the public site. Inactive events stay hidden."
         className="sm:max-w-xl"
       >
         <form onSubmit={save} className="grid gap-3 sm:grid-cols-2">
@@ -306,9 +391,38 @@ export function EventsPanel() {
             value={form.image}
             onChange={(image) => setForm((f) => ({ ...f, image }))}
           />
+          <label className="flex items-center justify-between gap-3 border border-white/10 px-3 py-2.5 text-sm text-cream sm:col-span-2">
+            <span>
+              <span className="block font-medium">Visible on site</span>
+              <span className="mt-0.5 block text-xs text-muted">
+                {form.active ? "Public pages will show this event." : "Hidden from public listings and booking."}
+              </span>
+            </span>
+            <button
+              type="button"
+              role="switch"
+              aria-checked={form.active}
+              onClick={() => setForm((f) => ({ ...f, active: !f.active }))}
+              className={`relative h-7 w-12 shrink-0 rounded-full transition ${
+                form.active ? "bg-emerald-600/80" : "bg-white/15"
+              }`}
+            >
+              <span
+                className={`absolute top-0.5 left-0.5 h-6 w-6 rounded-full bg-cream transition ${
+                  form.active ? "translate-x-5" : ""
+                }`}
+              />
+            </button>
+          </label>
           <label className="block text-xs text-muted sm:col-span-2">
             Title
-            <Input className="mt-1" value={form.title} onChange={(e) => setForm((f) => ({ ...f, title: e.target.value }))} required />
+            <Input
+              className="mt-1"
+              value={form.title}
+              onChange={(e) => setForm((f) => ({ ...f, title: e.target.value }))}
+              required
+              minLength={3}
+            />
           </label>
           <label className="block text-xs text-muted">
             Type
@@ -348,7 +462,15 @@ export function EventsPanel() {
           </label>
           <label className="block text-xs text-muted">
             Seats
-            <Input className="mt-1" type="number" min={1} value={form.seatsTotal} onChange={(e) => setForm((f) => ({ ...f, seatsTotal: e.target.value }))} required />
+            <Input
+              className="mt-1"
+              type="number"
+              min={1}
+              step={1}
+              value={form.seatsTotal}
+              onChange={(e) => setForm((f) => ({ ...f, seatsTotal: e.target.value }))}
+              required
+            />
           </label>
           <label className="block text-xs text-muted">
             Hosts
@@ -361,6 +483,7 @@ export function EventsPanel() {
               value={form.description}
               onChange={(e) => setForm((f) => ({ ...f, description: e.target.value }))}
               required
+              minLength={8}
             />
           </label>
           {error ? <p className="text-sm text-red-300 sm:col-span-2">{error}</p> : null}
@@ -384,12 +507,13 @@ function emptyEventForm(locationId: string): EventForm {
     type: "wine-tasting",
     description: "",
     locationId,
-    date: new Date().toISOString().slice(0, 10),
+    date: localToday(),
     startTime: "18:00",
     endTime: "20:00",
     price: "45",
     seatsTotal: "20",
     hosts: "",
     image: "",
+    active: true,
   };
 }

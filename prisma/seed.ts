@@ -11,6 +11,7 @@ import {
 } from "../src/data/events";
 import { hashPassword } from "../src/lib/auth/password";
 import { DEMO_PASSWORD } from "../src/lib/auth/roles";
+import { ensureDeliverySchema } from "../src/lib/db/delivery";
 import type { Order, Product, StoreLocation, UserProfile } from "../src/types";
 
 const prisma = new PrismaClient();
@@ -152,6 +153,9 @@ async function seedLocations() {
 }
 
 async function seedEvents() {
+  await prisma.$executeRawUnsafe(
+    `ALTER TABLE events ADD COLUMN IF NOT EXISTS active BOOLEAN NOT NULL DEFAULT true`,
+  );
   for (const e of events) {
     const row = {
       slug: e.slug,
@@ -172,6 +176,11 @@ async function seedEvents() {
       create: { id: e.id, seatsAvailable: e.seatsAvailable, ...row },
       update: row,
     });
+    await prisma.$executeRawUnsafe(
+      `UPDATE events SET active = $1 WHERE id = $2`,
+      e.active !== false,
+      e.id,
+    );
   }
 }
 
@@ -358,6 +367,9 @@ async function main() {
   const inventoryRows = locations.reduce((n, loc) => n + loc.inventory.length, 0);
   console.log(`Seeding ${locations.length} locations (${inventoryRows} inventory rows)…`);
   await seedLocations();
+
+  console.log("Seeding drivers…");
+  await ensureDeliverySchema();
 
   console.log(`Seeding ${events.length} events…`);
   await seedEvents();

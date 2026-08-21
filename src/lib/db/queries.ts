@@ -18,6 +18,8 @@ import { calculateShipping, calculateTax } from "@/lib/utils";
 import type { Prisma } from "@prisma/client";
 import { recordActivity } from "@/lib/db/activity";
 import { attachProfileExtras } from "@/lib/db/users";
+import { saveOrderDelivery, hydrateOrderDelivery } from "@/lib/db/delivery";
+import type { DeliveryAddress } from "@/types";
 
 function slugify(value: string) {
   return value
@@ -195,14 +197,26 @@ export async function deleteShopCategory(slug: string, actorUserId?: string) {
 
 export async function fetchEvents() {
   if (!isDbConfigured()) return seedEvents;
+  const { ensureEventSchema } = await import("@/lib/db/store-admin");
+  await ensureEventSchema();
   const rows = await prisma.event.findMany({ orderBy: { date: "asc" } });
-  return rows.map(mapEvent);
+  const flags = await prisma.$queryRaw<{ id: string; active: boolean }[]>`
+    SELECT id, active FROM events
+  `;
+  const activeById = new Map(flags.map((row) => [row.id, row.active]));
+  return rows.map((row) => mapEvent({ ...row, active: activeById.get(row.id) ?? true }));
 }
 
 export async function fetchEventBySlug(slug: string) {
   if (!isDbConfigured()) return seedEvents.find((e) => e.slug === slug);
+  const { ensureEventSchema } = await import("@/lib/db/store-admin");
+  await ensureEventSchema();
   const row = await prisma.event.findUnique({ where: { slug } });
-  return row ? mapEvent(row) : undefined;
+  if (!row) return undefined;
+  const flags = await prisma.$queryRaw<{ active: boolean }[]>`
+    SELECT active FROM events WHERE id = ${row.id}
+  `;
+  return mapEvent({ ...row, active: flags[0]?.active ?? true });
 }
 
 export async function fetchReviewsForProduct(productId: string) {
@@ -255,7 +269,8 @@ export async function fetchUserByEmail(email: string): Promise<UserProfile | nul
     },
   });
   if (!row) return null;
-  return attachProfileExtras(mapUser(row, row.orders.map(mapOrder)));
+  const orders = await Promise.all(row.orders.map((order) => hydrateOrderDelivery(mapOrder(order))));
+  return attachProfileExtras(mapUser(row, orders));
 }
 
 export async function fetchUserById(id: string): Promise<UserProfile | null> {
@@ -273,7 +288,8 @@ export async function fetchUserById(id: string): Promise<UserProfile | null> {
     },
   });
   if (!row) return null;
-  return attachProfileExtras(mapUser(row, row.orders.map(mapOrder)));
+  const orders = await Promise.all(row.orders.map((order) => hydrateOrderDelivery(mapOrder(order))));
+  return attachProfileExtras(mapUser(row, orders));
 }
 
 export async function updateUserProfile(
@@ -737,8 +753,14 @@ export async function bookEventSeats(eventId: string, qty: number, actorUserId?:
   if (!isDbConfigured()) return true;
   if (qty <= 0) return false;
 
+  const { ensureEventSchema } = await import("@/lib/db/store-admin");
+  await ensureEventSchema();
   const event = await prisma.event.findUnique({ where: { id: eventId } });
   if (!event) return false;
+  const flags = await prisma.$queryRaw<{ active: boolean }[]>`
+    SELECT active FROM events WHERE id = ${eventId}
+  `;
+  if (flags[0]?.active === false) return false;
   const result = await prisma.event.updateMany({
     where: { id: eventId, seatsAvailable: { gte: qty } },
     data: { seatsAvailable: { decrement: qty } },
@@ -762,19 +784,19 @@ async function ensureCustomer(
   input: { email: string; name: string; userId?: string; preferredBranchId: string },
 ) {
   const email = input.email.trim().toLowerCase();
+  // Authenticated checkout: only the session user may own the order.
   if (input.userId) {
     const byId = await tx.user.findUnique({ where: { id: input.userId } });
-    if (byId) return byId;
+    if (!byId || !byId.active) {
+      throw new Error("Signed-in account is not available for checkout.");
+    }
+    return byId;
   }
+  // Guest checkout: if the email already belongs to an account, require sign-in
+  // so strangers cannot attach orders to someone else's history.
   const existing = await tx.user.findUnique({ where: { email } });
   if (existing) {
-    if (existing.name !== input.name) {
-      return tx.user.update({
-        where: { id: existing.id },
-        data: { name: input.name },
-      });
-    }
-    return existing;
+    throw new Error("An account with this email already exists. Sign in to place the order.");
   }
   return tx.user.create({
     data: {
@@ -794,11 +816,13 @@ async function ensureCustomer(
 export async function placeOrder(input: {
   email: string;
   name: string;
+  phone?: string;
   userId?: string;
   locationId: string;
   fulfillment: Order["fulfillment"];
   items: Pick<CartItem, "productId" | "quantity">[];
   coupon?: string | null;
+  delivery?: DeliveryAddress;
 }) {
   if (!isDbConfigured()) {
     throw new Error("Database is not configured.");
@@ -843,10 +867,12 @@ export async function placeOrder(input: {
       locationId: input.locationId,
       tracking:
         input.fulfillment === "delivery"
-          ? `1Z${Math.floor(Math.random() * 1e12)
+          ? `SDL-${Math.floor(Math.random() * 1e8)
               .toString()
-              .padStart(12, "0")}`
+              .padStart(8, "0")}`
           : undefined,
+      delivery: input.fulfillment === "delivery" ? input.delivery : undefined,
+      deliveryStatus: input.fulfillment === "delivery" ? "unassigned" : undefined,
     };
 
     const user = await ensureCustomer(tx, {
@@ -890,6 +916,13 @@ export async function placeOrder(input: {
       loyaltyPoints: updatedUser.loyaltyPoints,
     };
   });
+
+  if (input.fulfillment === "delivery") {
+    if (!input.delivery) {
+      throw new Error("Delivery address is required for delivery orders.");
+    }
+    await saveOrderDelivery(result.order.id, input.delivery);
+  }
 
   await recordActivity({
     actorUserId: result.userId,
@@ -941,6 +974,8 @@ export async function createOrder(userId: string, order: Order) {
   return order;
 }
 
+const CANCELLABLE_STATUSES = new Set(["processing", "ready", "shipped"]);
+
 export async function cancelOrder(orderId: string, userId: string) {
   if (!isDbConfigured()) return null;
 
@@ -949,7 +984,7 @@ export async function cancelOrder(orderId: string, userId: string) {
       where: { id: orderId, userId },
       include: { items: true },
     });
-    if (!order || order.status === "cancelled") return null;
+    if (!order || !CANCELLABLE_STATUSES.has(order.status)) return null;
 
     await tx.order.update({
       where: { id: orderId },

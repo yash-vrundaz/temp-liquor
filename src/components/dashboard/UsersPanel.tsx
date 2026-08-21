@@ -224,7 +224,7 @@ export function UsersPanel() {
       </div>
 
       <div
-        className="mt-5 h-scroll border-b border-white/10"
+        className="mt-5 -mx-3 h-scroll border-b border-white/10 px-3 sm:mx-0 sm:px-0"
         role="tablist"
         aria-label="Users sections"
       >
@@ -237,7 +237,8 @@ export function UsersPanel() {
         <ViewTab
           active={view === "permissions"}
           icon={ShieldCheck}
-          label="Role permissions"
+          label="Roles"
+          shortLabel="Roles"
           onClick={() => setView("permissions")}
         />
       </div>
@@ -310,7 +311,7 @@ export function UsersPanel() {
 
           <div className="mt-3 border border-white/10">
             <MobileSortBar
-              className="border-b border-white/10 p-3 md:hidden"
+              className="border-b border-white/10 p-3 lg:hidden"
               columns={[
                 { key: "name", label: "User" },
                 { key: "role", label: "Role" },
@@ -321,7 +322,7 @@ export function UsersPanel() {
               sortDir={sortDir}
               onSort={toggleSort}
             />
-            <div className="hidden overflow-x-auto md:block">
+            <div className="hidden overflow-x-auto lg:block">
               <table className="w-full min-w-[980px] text-left text-sm">
                 <thead>
                   <tr className={tableHeadRowClass}>
@@ -356,7 +357,7 @@ export function UsersPanel() {
               </table>
             </div>
 
-            <ul className="divide-y divide-white/10 md:hidden">
+            <ul className="divide-y divide-white/10 lg:hidden">
               {users.map((user) => (
                 <li key={user.id} className="p-4">
                   <UserCard
@@ -432,11 +433,13 @@ function ViewTab({
   active,
   icon: Icon,
   label,
+  shortLabel,
   onClick,
 }: {
   active: boolean;
   icon: typeof Users;
   label: string;
+  shortLabel?: string;
   onClick: () => void;
 }) {
   return (
@@ -445,12 +448,13 @@ function ViewTab({
       role="tab"
       aria-selected={active}
       onClick={onClick}
-      className={`inline-flex items-center gap-2 border-b-2 px-4 py-3 text-sm uppercase tracking-[0.14em] transition-colors ${
+      className={`inline-flex min-h-11 items-center gap-2 border-b-2 px-3 py-3 text-sm uppercase tracking-[0.14em] transition-colors sm:px-4 ${
         active ? "border-(--gold) text-cream" : "border-transparent text-muted hover:text-cream"
       }`}
     >
       <Icon size={14} className={active ? "text-gold" : ""} />
-      {label}
+      <span className="sm:hidden">{shortLabel ?? label}</span>
+      <span className="hidden sm:inline">{label}</span>
     </button>
   );
 }
@@ -535,7 +539,9 @@ function UserActions({
     <div
       className={cn(
         "flex items-center gap-2",
-        compact ? "flex-nowrap justify-end" : "flex-wrap justify-start",
+        compact
+          ? "flex-nowrap justify-end"
+          : "w-full flex-col sm:w-auto sm:flex-row sm:flex-wrap sm:justify-start",
       )}
     >
       {showRoleSelect && (
@@ -546,14 +552,19 @@ function UserActions({
             value: r,
             label: ROLE_LABELS[r],
           }))}
-          className="w-32 shrink-0 [&_button]:h-8 [&_button]:py-0 [&_button]:text-xs"
+          className={cn(
+            "shrink-0",
+            compact
+              ? "w-32 [&_button]:h-8 [&_button]:py-0 [&_button]:text-xs"
+              : "w-full sm:w-36 [&_button]:min-h-10",
+          )}
         />
       )}
       {showAccessToggle && (
         <Button
           size="sm"
           variant="secondary"
-          className="h-8 shrink-0 px-2.5"
+          className={cn("shrink-0 px-2.5", compact ? "h-8" : "min-h-10 w-full sm:w-auto")}
           onClick={() => void onPatch({ userId: user.id, active: !user.active })}
         >
           {user.active ? "Deactivate" : "Activate"}
@@ -563,7 +574,7 @@ function UserActions({
         <Button
           size="sm"
           variant="secondary"
-          className="h-8 shrink-0 px-2.5"
+          className={cn("shrink-0 px-2.5", compact ? "h-8" : "min-h-10 w-full sm:w-auto")}
           onClick={onResetPassword}
         >
           <KeyRound size={13} />
@@ -571,7 +582,12 @@ function UserActions({
         </Button>
       )}
       {canEdit && (
-        <Button size="sm" variant="ghost" className="h-8 shrink-0 px-2.5" onClick={onEdit}>
+        <Button
+          size="sm"
+          variant="ghost"
+          className={cn("shrink-0 px-2.5", compact ? "h-8" : "min-h-10 w-full sm:w-auto")}
+          onClick={onEdit}
+        >
           <Pencil size={13} />
           Edit
         </Button>

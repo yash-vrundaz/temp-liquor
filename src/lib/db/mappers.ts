@@ -111,7 +111,7 @@ export function mapLocation(row: DbLocationRow): StoreLocation {
   };
 }
 
-export function mapEvent(row: DbEvent): EventItem {
+export function mapEvent(row: DbEvent & { active?: boolean | null }): EventItem {
   return {
     id: row.id,
     slug: row.slug,
@@ -127,6 +127,7 @@ export function mapEvent(row: DbEvent): EventItem {
     seatsAvailable: row.seatsAvailable,
     image: row.image,
     hosts: asStringArray(row.hosts),
+    active: row.active !== false,
   };
 }
 

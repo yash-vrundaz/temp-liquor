@@ -166,40 +166,43 @@ function PermissionRow({
   const meta = PERMISSION_META[permission];
   const tag = checked && !inRole ? "Added" : !checked && inRole ? "Removed" : inRole ? "Role" : null;
   return (
-    <li
-      className={cn(
-        "flex items-start gap-3 border-t border-white/5 py-2.5 pr-3",
-        indent ? "pl-10" : "pl-3",
-      )}
-    >
-      <input
-        type="checkbox"
-        className="mt-1 h-4 w-4 accent-(--gold)"
-        checked={checked}
-        disabled={!canToggle}
-        onChange={onToggle}
-      />
-      <div className="min-w-0 flex-1">
-        <div className="flex flex-wrap items-center gap-2">
-          <p className={cn("text-sm", checked ? "text-cream" : "text-muted")}>{meta.label}</p>
-          {hint ? <span className="text-[11px] text-muted">({hint})</span> : null}
-          {tag ? (
-            <span
-              className={cn(
-                "rounded-full border px-2 py-0.5 text-[10px] uppercase tracking-[0.12em]",
-                tag === "Added"
-                  ? "border-emerald-400/30 text-emerald-200"
-                  : tag === "Removed"
-                    ? "border-(--danger)/30 text-(--danger)"
-                    : "border-white/15 text-muted",
-              )}
-            >
-              {tag}
-            </span>
-          ) : null}
+    <li>
+      <label
+        className={cn(
+          "flex min-h-11 cursor-pointer items-start gap-3 border-t border-white/5 py-2.5 pr-3",
+          indent ? "pl-10" : "pl-3",
+          !canToggle && "cursor-default opacity-70",
+        )}
+      >
+        <input
+          type="checkbox"
+          className="mt-0.5 h-5 w-5 shrink-0 accent-(--gold)"
+          checked={checked}
+          disabled={!canToggle}
+          onChange={onToggle}
+        />
+        <div className="min-w-0 flex-1">
+          <div className="flex flex-wrap items-center gap-2">
+            <p className={cn("text-sm", checked ? "text-cream" : "text-muted")}>{meta.label}</p>
+            {hint ? <span className="text-[11px] text-muted">({hint})</span> : null}
+            {tag ? (
+              <span
+                className={cn(
+                  "rounded-full border px-2 py-0.5 text-[10px] uppercase tracking-[0.12em]",
+                  tag === "Added"
+                    ? "border-emerald-400/30 text-emerald-200"
+                    : tag === "Removed"
+                      ? "border-(--danger)/30 text-(--danger)"
+                      : "border-white/15 text-muted",
+                )}
+              >
+                {tag}
+              </span>
+            ) : null}
+          </div>
+          <p className="mt-0.5 text-[11px] text-muted">{meta.description}</p>
         </div>
-        <p className="mt-0.5 text-[11px] text-muted">{meta.description}</p>
-      </div>
+      </label>
     </li>
   );
 }
@@ -225,7 +228,7 @@ function GroupCheckbox({
     <input
       ref={ref}
       type="checkbox"
-      className="h-4 w-4 accent-(--gold)"
+      className="h-5 w-5 accent-(--gold)"
       checked={checked}
       disabled={disabled}
       onChange={onChange}

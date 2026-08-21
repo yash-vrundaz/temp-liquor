@@ -28,7 +28,7 @@ export function RolePermissionsMatrix({ highlight }: Props) {
 
   return (
     <div className="space-y-4">
-      <div className="grid grid-cols-2 gap-3 lg:grid-cols-4">
+      <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-4">
         {USER_ROLES.map((role) => {
           const count = rolePermissions(role).length;
           const active = highlight === role;
@@ -36,7 +36,7 @@ export function RolePermissionsMatrix({ highlight }: Props) {
             <article
               key={role}
               className={cn(
-                "flex min-h-[132px] flex-col border px-4 py-3",
+                "flex min-h-[120px] flex-col border px-4 py-3 sm:min-h-[132px]",
                 active
                   ? "border-(--gold)/45 bg-(--gold)/8"
                   : "border-white/10 bg-white/[0.02]",
@@ -57,7 +57,49 @@ export function RolePermissionsMatrix({ highlight }: Props) {
         })}
       </div>
 
-      <div className="overflow-x-auto border border-white/10">
+      {/* Mobile: stacked permission groups */}
+      <div className="space-y-3 lg:hidden">
+        {PERMISSION_GROUPS.map((group) => {
+          const { items, read, actions } = permissionGroupTree(group);
+          const expanded = Boolean(open[group]);
+          return (
+            <div key={group} className="border border-white/10">
+              <button
+                type="button"
+                onClick={() => setOpen((state) => ({ ...state, [group]: !expanded }))}
+                aria-expanded={expanded}
+                className="flex min-h-11 w-full items-center gap-2 bg-white/[0.04] px-4 py-3 text-left"
+              >
+                <ChevronRight
+                  size={14}
+                  className={cn("shrink-0 text-gold transition-transform", expanded && "rotate-90")}
+                />
+                <span className="text-[10px] uppercase tracking-[0.16em] text-gold">{group}</span>
+                <span className="text-[10px] text-muted">
+                  {items.length} item{items.length === 1 ? "" : "s"}
+                </span>
+              </button>
+              {expanded ? (
+                <ul className="divide-y divide-white/5">
+                  {read ? (
+                    <MobilePermissionRow permission={read} highlight={highlight} hint="read access" />
+                  ) : null}
+                  {actions.map((permission) => (
+                    <MobilePermissionRow
+                      key={permission}
+                      permission={permission}
+                      highlight={highlight}
+                    />
+                  ))}
+                </ul>
+              ) : null}
+            </div>
+          );
+        })}
+      </div>
+
+      {/* Desktop / tablet table */}
+      <div className="hidden overflow-x-auto border border-white/10 lg:block">
         <table className="w-full min-w-[680px] table-fixed text-left text-sm">
           <colgroup>
             <col className="w-[36%]" />
@@ -106,6 +148,45 @@ export function RolePermissionsMatrix({ highlight }: Props) {
   );
 }
 
+function MobilePermissionRow({
+  permission,
+  highlight,
+  hint,
+}: {
+  permission: Permission;
+  highlight?: UserRole;
+  hint?: string;
+}) {
+  const meta = PERMISSION_META[permission];
+  return (
+    <li className="px-4 py-3">
+      <p className="text-sm text-cream">
+        {meta.label}
+        {hint ? <span className="ml-1.5 text-[11px] text-muted">({hint})</span> : null}
+      </p>
+      <p className="mt-0.5 text-[11px] text-muted">{meta.description}</p>
+      <div className="mt-3 grid grid-cols-2 gap-2 sm:grid-cols-4">
+        {USER_ROLES.map((role) => {
+          const on = rolePermissions(role).includes(permission);
+          const active = highlight === role;
+          return (
+            <div
+              key={role}
+              className={cn(
+                "flex min-h-10 items-center justify-between gap-2 border px-2.5 py-2 text-[11px]",
+                active ? "border-(--gold)/40 bg-(--gold)/8" : "border-white/10",
+              )}
+            >
+              <span className={active ? "text-gold" : "text-muted"}>{ROLE_LABELS[role]}</span>
+              <Check on={on} />
+            </div>
+          );
+        })}
+      </div>
+    </li>
+  );
+}
+
 function GroupAccordion({
   group,
   expanded,
@@ -131,7 +212,7 @@ function GroupAccordion({
             type="button"
             onClick={onToggle}
             aria-expanded={expanded}
-            className="flex w-full items-center gap-2 px-4 py-2.5 text-left"
+            className="flex min-h-10 w-full items-center gap-2 px-4 py-2.5 text-left"
           >
             <ChevronRight
               size={14}

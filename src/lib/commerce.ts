@@ -4,12 +4,14 @@ export const COUPONS: Record<string, number> = {
   WELCOME20: 0.2,
 };
 
+export function isValidCoupon(code: string | null | undefined) {
+  if (!code) return false;
+  return Boolean(COUPONS[code.trim().toUpperCase()]);
+}
+
 export function getCouponDiscount(code: string | null | undefined, subtotal: number) {
   if (!code) return 0;
-  const key = code.toUpperCase();
-  // Own-property check avoids matching inherited keys like "constructor".
-  if (!Object.hasOwn(COUPONS, key)) return 0;
-  const rate = COUPONS[key];
+  const rate = COUPONS[code.toUpperCase()];
   if (!rate) return 0;
   return Math.round(subtotal * rate * 100) / 100;
 }

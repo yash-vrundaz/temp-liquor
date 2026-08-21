@@ -11,6 +11,7 @@ import { Input } from "@/components/ui/Input";
 import { PasswordInput } from "@/components/ui/PasswordInput";
 import { AvatarUpload } from "@/components/ui/AvatarUpload";
 import { formatPrice } from "@/lib/utils";
+import { useDeliveryStore } from "@/store/delivery";
 
 export default function AccountPage() {
   const router = useRouter();
@@ -23,6 +24,7 @@ export default function AccountPage() {
   const [error, setError] = useState("");
   const [busy, setBusy] = useState(false);
   const demoLocked = isDemoAccountEmail(profile.email);
+  const enrich = useDeliveryStore((s) => s.enrich);
 
   useEffect(() => {
     if (authReady && !isLoggedIn) router.replace("/login?next=/account");
@@ -147,16 +149,32 @@ export default function AccountPage() {
             <p className="mt-3 text-sm text-muted">No orders yet.</p>
           ) : (
             <ul className="mt-4 space-y-3">
-              {profile.orders.slice(0, 8).map((order) => (
-                <li
-                  key={order.id}
-                  className="flex items-center justify-between border border-white/10 px-4 py-3 text-sm"
-                >
-                  <span className="text-cream">{order.id}</span>
-                  <span className="text-muted">{order.status}</span>
-                  <span className="text-gold">{formatPrice(order.total)}</span>
-                </li>
-              ))}
+              {profile.orders.slice(0, 8).map((raw) => {
+                const order = enrich(raw);
+                return (
+                  <li
+                    key={order.id}
+                    className="border border-white/10 px-4 py-3 text-sm"
+                  >
+                    <div className="flex items-center justify-between gap-3">
+                      <span className="text-cream">{order.id}</span>
+                      <span className="text-gold">{formatPrice(order.total)}</span>
+                    </div>
+                    <p className="mt-1 text-xs uppercase tracking-wider text-muted">
+                      {order.fulfillment === "delivery"
+                        ? order.deliveryStatus?.replace("_", " ") ?? order.status
+                        : order.status}
+                    </p>
+                    {order.fulfillment === "delivery" ? (
+                      <p className="mt-1 text-xs text-muted">
+                        {order.driver
+                          ? `Driver ${order.driver.name} · ${order.driver.phone} · ${order.driver.vehicle}`
+                          : "A Sam’s driver will be assigned from your store"}
+                      </p>
+                    ) : null}
+                  </li>
+                );
+              })}
             </ul>
           )}
         </div>

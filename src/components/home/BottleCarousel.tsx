@@ -3,6 +3,7 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import Image from "next/image";
 import Link from "next/link";
+import { useRouter } from "next/navigation";
 import { AnimatePresence, motion } from "framer-motion";
 import { ChevronLeft, ChevronRight } from "lucide-react";
 import type { Product } from "@/types";
@@ -27,6 +28,7 @@ export function BottleCarousel({
 }: Props) {
   const list = products.filter((p) => p.images[0]);
   const count = list.length;
+  const router = useRouter();
   const [active, setActive] = useState(0);
   const [hovering, setHovering] = useState(false);
   const [step, setStep] = useState(150);
@@ -155,15 +157,19 @@ export function BottleCarousel({
               <motion.button
                 key={p.id}
                 type="button"
-                aria-label={p.name}
+                aria-label={isCenter ? `View ${p.name}` : `Show ${p.name}`}
                 aria-hidden={hidden}
                 tabIndex={isCenter ? 0 : -1}
                 disabled={hidden}
                 onClick={(e) => {
                   e.stopPropagation();
-                  if (!isCenter) goTo(i, true);
+                  if (!isCenter) {
+                    goTo(i, true);
+                    return;
+                  }
+                  router.push(`/products/${p.slug}`);
                 }}
-                className="absolute bottom-14 border-0 bg-transparent p-0 outline-none md:bottom-16"
+                className="absolute bottom-14 cursor-pointer border-0 bg-transparent p-0 outline-none md:bottom-16"
                 style={{
                   left: "50%",
                   width: bottleW,
@@ -255,13 +261,16 @@ export function BottleCarousel({
             exit={{ opacity: 0, y: -8 }}
             transition={{ duration: 0.3 }}
           >
-            <p className="break-words font-display text-lg uppercase tracking-[0.06em] text-white sm:text-xl md:text-2xl">
+            <Link
+              href={`/products/${current.slug}`}
+              className="break-words font-display text-lg uppercase tracking-[0.06em] text-white transition hover:text-gold sm:text-xl md:text-2xl"
+            >
               <span className="block sm:inline">{current.brand}</span>
               <span className="mx-2 hidden text-white/30 sm:inline">/</span>
               <span className="mt-1 block font-normal normal-case tracking-normal text-cream sm:mt-0 sm:inline sm:uppercase sm:tracking-[0.06em]">
                 {current.name.replace(current.brand, "").trim() || current.name}
               </span>
-            </p>
+            </Link>
             <p className="mt-2 text-sm text-[var(--muted)]">
               {current.origin} · {current.abv}% ABV
             </p>

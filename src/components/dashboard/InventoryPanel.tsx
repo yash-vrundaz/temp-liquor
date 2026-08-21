@@ -15,6 +15,7 @@ import {
 } from "@/lib/inventory";
 import type { CategorySlug, Product } from "@/types";
 import { BottleForm } from "@/components/dashboard/AddBottleForm";
+import { CategoriesPanel } from "@/components/dashboard/CategoriesPanel";
 import { Button } from "@/components/ui/Button";
 import { Input } from "@/components/ui/Input";
 import { Modal } from "@/components/ui/Modal";
@@ -28,10 +29,12 @@ type Props = {
   locationId: string | "all";
   onLocationChange?: (id: string | "all") => void;
   locations?: ReturnType<typeof getAllLocations>;
+  initialView?: "stock" | "categories";
 };
 
 type StockFilter = "all" | "low" | "out" | "ok";
-type SortKey = "name" | "status" | "seed" | "stock";
+type SortKey = "name" | "status" | "stock";
+type InventoryView = "stock" | "categories";
 
 function productImage(product: Product) {
   return product.images?.[0] || "";
@@ -73,7 +76,7 @@ function QtyControl({
     <div className="inline-flex items-center border border-white/15 bg-black/35">
       <button
         type="button"
-        className="min-h-9 min-w-9 text-muted disabled:opacity-30"
+        className="min-h-10 min-w-10 text-muted disabled:opacity-30"
         disabled={disabled || value <= 0}
         onClick={() => onAdjust(-1)}
         aria-label={`Decrease ${label}`}
@@ -96,7 +99,7 @@ function QtyControl({
       />
       <button
         type="button"
-        className="min-h-9 min-w-9 text-muted disabled:opacity-30"
+        className="min-h-10 min-w-10 text-muted disabled:opacity-30"
         disabled={disabled}
         onClick={() => onAdjust(1)}
         aria-label={`Increase ${label}`}
@@ -107,7 +110,12 @@ function QtyControl({
   );
 }
 
-export function InventoryPanel({ locationId, onLocationChange, locations }: Props) {
+export function InventoryPanel({
+  locationId,
+  onLocationChange,
+  locations,
+  initialView = "stock",
+}: Props) {
   const profile = useUserStore((s) => s.profile);
   const canAdjust = hasPermission(profile, "inventory.adjust");
   const canRestock = hasPermission(profile, "inventory.restock");
@@ -115,6 +123,10 @@ export function InventoryPanel({ locationId, onLocationChange, locations }: Prop
   const canAddBottle = hasPermission(profile, "catalog.create");
   const canEditBottle = hasPermission(profile, "catalog.edit");
   const canDeleteBottle = hasPermission(profile, "catalog.delete");
+  const canManageCategories =
+    hasPermission(profile, "catalog.create") ||
+    hasPermission(profile, "catalog.edit") ||
+    hasPermission(profile, "catalog.delete");
   const stocks = useInventoryStore((s) => s.stocks);
   const ledger = useInventoryStore((s) => s.ledger);
   const setOnHand = useInventoryStore((s) => s.setOnHand);
@@ -124,6 +136,9 @@ export function InventoryPanel({ locationId, onLocationChange, locations }: Prop
   const removeBottle = useCatalogStore((s) => s.removeBottle);
   const custom = useCatalogStore((s) => s.custom);
 
+  const [view, setView] = useState<InventoryView>(
+    initialView === "categories" && canManageCategories ? "categories" : "stock",
+  );
   const [query, setQuery] = useState("");
   const [stockFilter, setStockFilter] = useState<StockFilter>("all");
   const [category, setCategory] = useState<CategorySlug | "all">("all");
@@ -182,7 +197,6 @@ export function InventoryPanel({ locationId, onLocationChange, locations }: Prop
     const rank = { out: 0, low: 1, ok: 2 };
     return list.sort((a, b) => {
       if (sortKey === "status") return compareValues(rank[a.status], rank[b.status], sortDir);
-      if (sortKey === "seed") return compareValues(a.seed, b.seed, sortDir);
       if (sortKey === "stock") return compareValues(a.onHand, b.onHand, sortDir);
       return compareValues(a.product.name, b.product.name, sortDir);
     });
@@ -236,6 +250,7 @@ export function InventoryPanel({ locationId, onLocationChange, locations }: Prop
   };
 
   const selectStore = (id: string) => onLocationChange?.(id);
+  const showCategories = view === "categories" && canManageCategories;
 
   return (
     <section className="mt-6">
@@ -246,36 +261,97 @@ export function InventoryPanel({ locationId, onLocationChange, locations }: Prop
             Inventory
           </h2>
           <p className="mt-1 text-sm text-muted">
-            One store at a time · each bottle listed once
+            {showCategories
+              ? "Shop collections used when adding and filtering bottles"
+              : "One store at a time · each bottle listed once"}
           </p>
         </div>
-        <div className="flex flex-wrap gap-2">
-          {canAddBottle && !editor && (
-            <Button size="sm" onClick={() => setEditor("new")}>
-              Add bottle
-            </Button>
-          )}
-          {canReset && (
-            <Button
-              size="sm"
-              variant="secondary"
-              onClick={() => resetToCatalog(storeId)}
-            >
-              <RotateCcw size={14} />
-              Reset store
-            </Button>
-          )}
-          {canRestock && (
-            <Button size="sm" variant="secondary" onClick={restockLowOut}>
-              Restock low / out
-            </Button>
-          )}
-        </div>
+        {!showCategories ? (
+          <div className="flex flex-wrap gap-2">
+            {canAddBottle && !editor && (
+              <Button size="sm" onClick={() => setEditor("new")}>
+                Add bottle
+              </Button>
+            )}
+            {canReset && (
+              <Button
+                size="sm"
+                variant="secondary"
+                onClick={() => resetToCatalog(storeId)}
+              >
+                <RotateCcw size={14} />
+                Reset store
+              </Button>
+            )}
+            {canRestock && (
+              <Button size="sm" variant="secondary" onClick={restockLowOut}>
+                Restock low / out
+              </Button>
+            )}
+          </div>
+        ) : null}
       </div>
 
-      {/* Store tabs */}
+      {canManageCategories ? (
+        <div
+          className="mt-5 -mx-3 h-scroll border-b border-white/10 px-3 sm:mx-0 sm:px-0"
+          role="tablist"
+          aria-label="Inventory sections"
+        >
+          <div className="flex min-w-max gap-1">
+            {(
+              [
+                { id: "stock" as const, label: "Stock" },
+                { id: "categories" as const, label: "Categories" },
+              ] as const
+            ).map((tab) => {
+              const active = view === tab.id;
+              return (
+                <button
+                  key={tab.id}
+                  type="button"
+                  role="tab"
+                  aria-selected={active}
+                  onClick={() => setView(tab.id)}
+                  className={`relative min-h-11 px-3 py-2.5 text-[11px] uppercase tracking-[0.16em] transition ${
+                    active ? "text-cream" : "text-muted hover:text-cream"
+                  }`}
+                >
+                  {tab.label}
+                  {active ? (
+                    <span className="absolute inset-x-2 bottom-0 h-px bg-(--gold)" />
+                  ) : null}
+                </button>
+              );
+            })}
+          </div>
+        </div>
+      ) : null}
+
+      {showCategories ? <CategoriesPanel embedded /> : null}
+
+      {!showCategories ? (
+        <>
+      {/* Store picker — select on mobile, tabs on sm+ */}
+      <div className="mt-5 sm:hidden">
+        <label className="block text-xs text-muted">
+          Store
+          <select
+            value={storeId}
+            onChange={(e) => selectStore(e.target.value)}
+            className={`${selectClass} mt-1 w-full min-h-11`}
+            aria-label="Store inventory"
+          >
+            {stores.map((loc) => (
+              <option key={loc.id} value={loc.id}>
+                {loc.shortName} · {loc.city}
+              </option>
+            ))}
+          </select>
+        </label>
+      </div>
       <div
-        className="mt-5 -mx-3 h-scroll border-b border-white/10 px-3 sm:mx-0 sm:px-0"
+        className="mt-5 -mx-3 hidden h-scroll border-b border-white/10 px-3 sm:mx-0 sm:flex sm:px-0"
         role="tablist"
         aria-label="Store inventory"
       >
@@ -394,11 +470,10 @@ export function InventoryPanel({ locationId, onLocationChange, locations }: Prop
       </div>
 
       <MobileSortBar
-        className="mt-3 md:hidden"
+        className="mt-3 lg:hidden"
         columns={[
           { key: "name", label: "Bottle" },
           { key: "status", label: "Status" },
-          { key: "seed", label: "Seed" },
           { key: "stock", label: "On hand" },
         ]}
         sortKey={sortKey}
@@ -407,7 +482,7 @@ export function InventoryPanel({ locationId, onLocationChange, locations }: Prop
       />
 
       {/* Desktop / tablet table */}
-      <div className={`mt-3 hidden md:block ${tableWrapClass}`}>
+      <div className={`mt-3 hidden lg:block ${tableWrapClass}`}>
         <table className="w-full min-w-160 text-left text-sm">
           <thead>
             <tr className={tableHeadRowClass}>
@@ -426,13 +501,6 @@ export function InventoryPanel({ locationId, onLocationChange, locations }: Prop
                 onSort={toggleSort}
               />
               <SortableTh
-                label="Seed"
-                column="seed"
-                sortKey={sortKey}
-                sortDir={sortDir}
-                onSort={toggleSort}
-              />
-              <SortableTh
                 label="On hand"
                 column="stock"
                 sortKey={sortKey}
@@ -445,12 +513,12 @@ export function InventoryPanel({ locationId, onLocationChange, locations }: Prop
           <tbody>
             {pageRows.length === 0 ? (
               <tr>
-                <td colSpan={5} className="px-4 py-12 text-center text-muted">
+                <td colSpan={4} className="px-4 py-12 text-center text-muted">
                   No bottles match these filters.
                 </td>
               </tr>
             ) : (
-              pageRows.map(({ product, onHand, seed, status }) => {
+              pageRows.map(({ product, onHand, status }) => {
                 const img = productImage(product);
                 return (
                   <tr key={product.id} className={tableRowClass}>
@@ -480,7 +548,6 @@ export function InventoryPanel({ locationId, onLocationChange, locations }: Prop
                     <td className={tableCellClass}>
                       <StatusPill status={status} />
                     </td>
-                    <td className={`${tableCellClass} tabular-nums text-muted`}>{seed}</td>
                     <td className={tableCellClass}>
                       <QtyControl
                         value={onHand}
@@ -511,31 +578,15 @@ export function InventoryPanel({ locationId, onLocationChange, locations }: Prop
                           </Button>
                         ) : null}
                         {canRestock ? (
-                          <>
-                            <button
-                              type="button"
-                              className="px-2 py-1 text-[11px] uppercase tracking-wider text-muted hover:text-cream"
-                              onClick={() =>
-                                adjust(storeId, product.id, 12, "restock")
-                              }
-                            >
-                              +12
-                            </button>
-                            <button
-                              type="button"
-                              className="px-2 py-1 text-[11px] uppercase tracking-wider text-muted hover:text-cream"
-                              onClick={() =>
-                                setOnHand(
-                                  storeId,
-                                  product.id,
-                                  Math.max(seed, REORDER_POINT + 5),
-                                  "restock",
-                                )
-                              }
-                            >
-                              Seed
-                            </button>
-                          </>
+                          <button
+                            type="button"
+                            className="px-2 py-1 text-[11px] uppercase tracking-wider text-muted hover:text-cream"
+                            onClick={() =>
+                              adjust(storeId, product.id, 12, "restock")
+                            }
+                          >
+                            +12
+                          </button>
                         ) : !canEditBottle ? (
                           <span className="text-[11px] text-muted">View only</span>
                         ) : null}
@@ -550,13 +601,13 @@ export function InventoryPanel({ locationId, onLocationChange, locations }: Prop
       </div>
 
       {/* Mobile list */}
-      <ul className="mt-3 space-y-0 divide-y divide-white/10 md:hidden">
+      <ul className="mt-3 space-y-0 divide-y divide-white/10 lg:hidden">
         {pageRows.length === 0 ? (
           <li className="py-10 text-center text-sm text-muted">
             No bottles match these filters.
           </li>
         ) : (
-          pageRows.map(({ product, onHand, seed, status }) => {
+          pageRows.map(({ product, onHand, status }) => {
             const img = productImage(product);
             return (
               <li key={product.id} className="py-4">
@@ -599,7 +650,7 @@ export function InventoryPanel({ locationId, onLocationChange, locations }: Prop
                       {canRestock && (
                         <button
                           type="button"
-                          className="text-[11px] uppercase tracking-wider text-muted"
+                          className="inline-flex min-h-10 items-center px-3 text-[11px] uppercase tracking-wider text-muted"
                           onClick={() =>
                             adjust(storeId, product.id, 12, "restock")
                           }
@@ -610,16 +661,13 @@ export function InventoryPanel({ locationId, onLocationChange, locations }: Prop
                       {canEditBottle ? (
                         <button
                           type="button"
-                          className="inline-flex items-center gap-1 text-[11px] uppercase tracking-wider text-muted hover:text-cream"
+                          className="inline-flex min-h-10 items-center gap-1 px-3 text-[11px] uppercase tracking-wider text-muted hover:text-cream"
                           onClick={() => setEditor(product)}
                         >
                           <Pencil size={12} />
                           Edit
                         </button>
                       ) : null}
-                      <span className="text-[11px] text-muted">
-                        Seed {seed}
-                      </span>
                     </div>
                   </div>
                 </div>
@@ -723,6 +771,8 @@ export function InventoryPanel({ locationId, onLocationChange, locations }: Prop
           onClose={() => setEditor(null)}
         />
       </Modal>
+        </>
+      ) : null}
     </section>
   );
 }

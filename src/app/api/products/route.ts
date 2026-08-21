@@ -21,9 +21,10 @@ export async function POST(request: Request) {
     if (!parsed.success) {
       return NextResponse.json({ error: "Invalid product payload." }, { status: 400 });
     }
+    const { actorUserId: _actor, ...input } = parsed.data;
     const existing = await fetchAllProducts();
     const result = await createCustomProduct(
-      parsed.data,
+      input,
       existing.map((p) => p.slug),
       user.id,
     );

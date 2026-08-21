@@ -2,7 +2,7 @@
 
 import { MapPin } from "lucide-react";
 import { useBranchStore } from "@/store/branch";
-import { useCartStore } from "@/store/cart";
+import { addToCart } from "@/lib/add-to-cart";
 import { useInventoryStore } from "@/store/inventory";
 import { otherLocationsForDemand } from "@/lib/cart-availability";
 import { cn } from "@/lib/utils";
@@ -33,7 +33,6 @@ export function OtherBranchStock({
   const onHand =
     localStock ?? useInventoryStore.getState().getOnHand(branchId, productId);
   const setBranch = useBranchStore((s) => s.setBranch);
-  const addItem = useCartStore((s) => s.addItem);
   void revision;
 
   const needed = Math.max(1, quantity);
@@ -42,7 +41,7 @@ export function OtherBranchStock({
 
   const switchTo = (locationId: string) => {
     setBranch(locationId);
-    if (addOnSwitch && addOnSwitch > 0) addItem(productId, addOnSwitch);
+    if (addOnSwitch && addOnSwitch > 0) addToCart(productId, addOnSwitch);
   };
 
   const headline =
