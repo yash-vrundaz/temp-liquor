@@ -1,3 +1,5 @@
+import { ensureLocationPricingSchema, mapLocationPricing } from "@/lib/db/location-pricing";
+import { DEFAULT_FULFILLMENT_PRICING } from "@/lib/fulfillment-pricing";
 import { prisma, isDbConfigured } from "@/lib/db/prisma";
 import { mapEvent, mapLocation } from "@/lib/db/mappers";
 import { recordActivity } from "@/lib/db/activity";
@@ -73,7 +75,11 @@ export type LocationInput = {
   email: string;
   description?: string;
   pickupAvailable?: boolean;
+  deliveryAvailable?: boolean;
   deliveryRadiusKm?: number;
+  deliveryFee?: number;
+  deliveryFreeMinimum?: number;
+  taxRate?: number;
   parking?: string;
   heroImage?: string;
   gallery?: string[];
@@ -100,6 +106,7 @@ export async function createStoreLocation(actor: UserProfile, input: LocationInp
     return { error: "You cannot add locations.", status: 403 as const };
   }
   if (!isDbConfigured()) return { error: "Database is not configured.", status: 503 as const };
+  await ensureLocationPricingSchema();
 
   const shortName = input.shortName.trim();
   const name = input.name.trim() || `Sam's Discount Liquor — ${shortName}`;
@@ -130,10 +137,15 @@ export async function createStoreLocation(actor: UserProfile, input: LocationInp
         services: ["Pickup", "Gift wrapping"],
         parking: input.parking?.trim() || "Street parking nearby.",
         pickupAvailable: input.pickupAvailable ?? true,
+        deliveryAvailable: input.deliveryAvailable ?? DEFAULT_FULFILLMENT_PRICING.deliveryAvailable,
         deliveryRadiusKm: input.deliveryRadiusKm ?? 8,
+        deliveryFee: input.deliveryFee ?? DEFAULT_FULFILLMENT_PRICING.deliveryFee,
+        deliveryFreeMinimum:
+          input.deliveryFreeMinimum ?? DEFAULT_FULFILLMENT_PRICING.deliveryFreeMinimum,
+        taxRate: input.taxRate ?? DEFAULT_FULFILLMENT_PRICING.taxRate,
         featuredOffers: [],
         description: input.description?.trim() || `${name} is now part of the Sam's Discount Liquor network.`,
-      },
+      } as never,
     });
     const products = await tx.product.findMany({ select: { id: true } });
     if (products.length) {
@@ -186,6 +198,7 @@ export async function updateStoreLocation(
     return { error: "You cannot manage that store.", status: 403 as const };
   }
   if (!isDbConfigured()) return { error: "Database is not configured.", status: 503 as const };
+  await ensureLocationPricingSchema();
   const existing = await prisma.location.findUnique({ where: { id: locationId } });
   if (!existing) return { error: "Location not found.", status: 404 as const };
 
@@ -205,6 +218,8 @@ export async function updateStoreLocation(
       ? composeGallery(heroImage, input.gallery)
       : composeGallery(heroImage, previousExtras);
 
+  const existingPricing = mapLocationPricing(existing);
+
   await prisma.location.update({
     where: { id: locationId },
     data: {
@@ -219,13 +234,17 @@ export async function updateStoreLocation(
       email: input.email?.trim().toLowerCase() ?? existing.email,
       description: input.description?.trim() ?? existing.description,
       pickupAvailable: input.pickupAvailable ?? existing.pickupAvailable,
+      deliveryAvailable: input.deliveryAvailable ?? existingPricing.deliveryAvailable,
       deliveryRadiusKm: input.deliveryRadiusKm ?? existing.deliveryRadiusKm,
+      deliveryFee: input.deliveryFee ?? existingPricing.deliveryFee,
+      deliveryFreeMinimum: input.deliveryFreeMinimum ?? existingPricing.deliveryFreeMinimum,
+      taxRate: input.taxRate ?? existingPricing.taxRate,
       parking: input.parking?.trim() ?? existing.parking,
       heroImage,
       gallery,
       lat: input.lat ?? existing.lat,
       lng: input.lng ?? existing.lng,
-    },
+    } as never,
   });
 
   const row = await prisma.location.findUnique({

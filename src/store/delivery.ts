@@ -14,6 +14,8 @@ type DeliveryState = {
   attach: (orderId: string, delivery: DeliveryAddress) => void;
   assign: (orderId: string, driverId: string) => void;
   setStatus: (orderId: string, status: DeliveryStatus) => void;
+  upsertDriver: (driver: Driver) => void;
+  setDriverActive: (driverId: string, active: boolean) => void;
   enrich: (order: Order) => Order;
 };
 
@@ -58,6 +60,24 @@ export const useDeliveryStore = create<DeliveryState>()(
             ),
           };
         }),
+      upsertDriver: (driver) =>
+        set((s) => {
+          const idx = s.drivers.findIndex((item) => item.id === driver.id);
+          if (idx >= 0) {
+            return {
+              drivers: s.drivers.map((item, index) => (index === idx ? driver : item)),
+            };
+          }
+          return { drivers: [...s.drivers, driver] };
+        }),
+      setDriverActive: (driverId, active) =>
+        set((s) => ({
+          drivers: s.drivers.map((driver) =>
+            driver.id === driverId
+              ? { ...driver, active, status: active ? "available" : "offline" }
+              : driver,
+          ),
+        })),
       enrich: (order) => {
         const extra = get().byOrder[order.id];
         const driver = extra?.driverId

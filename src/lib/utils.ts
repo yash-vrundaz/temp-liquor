@@ -41,15 +41,15 @@ export function formatAbv(abv: number) {
   return `${abv}% ABV`;
 }
 
-export function calculateTax(subtotal: number, rate = 0.08875) {
-  return Math.round(subtotal * rate * 100) / 100;
-}
-
-export function calculateShipping(subtotal: number, fulfillment: "delivery" | "pickup") {
-  if (fulfillment === "pickup") return 0;
-  if (subtotal >= 150) return 0;
-  return 12.5;
-}
+export {
+  calculateShipping,
+  calculateTax,
+  formatDeliveryPricingSummary,
+  formatTaxRatePercent,
+  amountUntilFreeDelivery,
+  pricingFromLocation,
+  DEFAULT_FULFILLMENT_PRICING,
+} from "@/lib/fulfillment-pricing";
 
 export function getRecommendations(
   prefs: {

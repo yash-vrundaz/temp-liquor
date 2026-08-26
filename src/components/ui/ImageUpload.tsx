@@ -3,6 +3,7 @@
 import { useRef, useState } from "react";
 import { ImagePlus, X } from "lucide-react";
 import { fileToJpegBlob } from "@/lib/image-file";
+import { getClientAccessToken } from "@/lib/auth/client-token";
 import { Button } from "@/components/ui/Button";
 import { cn } from "@/lib/utils";
 
@@ -18,9 +19,13 @@ async function uploadImage(file: File) {
   const blob = await fileToJpegBlob(file);
   const body = new FormData();
   body.append("file", blob, "photo.jpg");
+  const headers: HeadersInit = {};
+  const bearer = getClientAccessToken();
+  if (bearer) headers.Authorization = `Bearer ${bearer}`;
   const res = await fetch("/api/uploads", {
     method: "POST",
     credentials: "same-origin",
+    headers,
     body,
   });
   const data = (await res.json().catch(() => ({}))) as { url?: string; error?: string };

@@ -2,9 +2,14 @@ import { NextResponse } from "next/server";
 import { cancelOrder, fetchInventoryState, placeOrder, StockConflictError } from "@/lib/db/queries";
 import { cancelOrderSchema, placeOrderSchema } from "@/lib/db/validators";
 import { getRequestUser, requireUser } from "@/lib/auth/require";
+import { clientIp, rateLimit, tooManyRequests } from "@/lib/rate-limit";
 
 export async function POST(request: Request) {
   try {
+    const limited = rateLimit(`orders:${clientIp(request)}`, { limit: 8, windowMs: 60_000 });
+    if (!limited.ok) {
+      return tooManyRequests(limited.retryAfter, "Too many checkout attempts. Try again shortly.");
+    }
     const parsed = placeOrderSchema.safeParse(await request.json());
     if (!parsed.success) {
       const first = parsed.error.issues[0]?.message;
@@ -15,8 +20,9 @@ export async function POST(request: Request) {
     }
     const actor = await getRequestUser();
     // Never trust body userId — guests cannot attribute orders to arbitrary accounts.
-    const { userId: _ignored, ...orderInput } = parsed.data;
+    const { userId: _ignored, ageConfirmed: _age, ...orderInput } = parsed.data;
     void _ignored;
+    void _age;
     const result = await placeOrder({
       ...orderInput,
       userId: actor?.id,
@@ -37,6 +43,7 @@ export async function POST(request: Request) {
         "Signed-in account is not available",
         "Location not found",
         "Unknown product",
+        "is not available at this store",
       ];
       if (known.some((msg) => error.message.includes(msg))) {
         return NextResponse.json({ error: error.message }, { status: 400 });

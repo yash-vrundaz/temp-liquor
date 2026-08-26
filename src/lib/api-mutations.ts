@@ -2,8 +2,13 @@ import { apiFetch } from "@/lib/api-client";
 import type { ActivityLogEntry, ManagedUser, Order, Product, UserProfile } from "@/types";
 import type { NewBottleInput } from "@/types";
 import { withActor } from "@/lib/current-actor";
+import { clearClientAccessToken } from "@/lib/auth/client-token";
 
-type InventorySnapshot = { stocks: Record<string, number>; seats: Record<string, number> };
+type InventorySnapshot = {
+  stocks: Record<string, number>;
+  seats: Record<string, number>;
+  hidden?: Record<string, boolean>;
+};
 
 export async function apiSetInventory(
   locationId: string,
@@ -20,6 +25,24 @@ export async function apiSetInventory(
         productId,
         quantity,
         reason,
+      }),
+    ),
+  });
+}
+
+export async function apiSetProductVisibility(
+  locationId: string,
+  productId: string,
+  hidden: boolean,
+) {
+  return apiFetch<{ ok: true; hidden: boolean; inventory?: InventorySnapshot }>("/api/inventory", {
+    method: "PATCH",
+    body: JSON.stringify(
+      withActor({
+        action: "visibility",
+        locationId,
+        productId,
+        hidden,
       }),
     ),
   });
@@ -97,6 +120,13 @@ export async function apiCreateProduct(input: NewBottleInput) {
   });
 }
 
+export async function apiDeleteProduct(productId: string) {
+  return apiFetch<{ ok: boolean; id: string; inventory?: InventorySnapshot }>(
+    `/api/products?id=${encodeURIComponent(productId)}`,
+    { method: "DELETE" },
+  );
+}
+
 export async function apiPatchProduct(
   productId: string,
   patch: import("@/types").BottlePatch,
@@ -116,6 +146,7 @@ export async function apiPlaceOrder(input: {
   fulfillment: Order["fulfillment"];
   items: { productId: string; quantity: number }[];
   coupon?: string | null;
+  ageConfirmed?: true;
   delivery?: import("@/types").DeliveryAddress;
 }) {
   return apiFetch<{
@@ -137,21 +168,35 @@ export async function apiCancelOrder(_userId: string, orderId: string) {
 }
 
 export async function apiLogin(email: string, password: string) {
-  return apiFetch<{ user: UserProfile }>("/api/auth/login", {
+  return apiFetch<{
+    user: UserProfile;
+    accessToken: string;
+    tokenType: "Bearer";
+    expiresIn: number;
+  }>("/api/auth/login", {
     method: "POST",
     body: JSON.stringify({ email, password }),
   });
 }
 
 export async function apiSignup(name: string, email: string, password: string) {
-  return apiFetch<{ user: UserProfile }>("/api/auth/signup", {
+  return apiFetch<{
+    user: UserProfile;
+    accessToken: string;
+    tokenType: "Bearer";
+    expiresIn: number;
+  }>("/api/auth/signup", {
     method: "POST",
     body: JSON.stringify({ name, email, password }),
   });
 }
 
 export async function apiLogout() {
-  await apiFetch("/api/auth/logout", { method: "POST" });
+  try {
+    await apiFetch("/api/auth/logout", { method: "POST" });
+  } finally {
+    clearClientAccessToken();
+  }
 }
 
 export async function apiMe() {
@@ -161,7 +206,7 @@ export async function apiMe() {
 export async function apiUpdateMe(
   patch: Partial<
     Pick<UserProfile, "name" | "email" | "avatarUrl" | "preferredBranchId" | "recentlyViewed" | "addresses">
-  > & { password?: string },
+  > & { password?: string; currentPassword?: string },
 ) {
   return apiFetch<{ user: UserProfile }>("/api/auth/me", {
     method: "PATCH",
@@ -228,6 +273,45 @@ export async function apiPatchUser(input: {
   return apiFetch<{ user: ManagedUser }>("/api/users", {
     method: "PATCH",
     body: JSON.stringify(input),
+  });
+}
+
+export async function apiFetchRoles() {
+  return apiFetch<{ roles: import("@/lib/auth/role-catalog").CustomRoleDefinition[] }>("/api/roles");
+}
+
+export async function apiCreateRole(input: {
+  label: string;
+  description?: string;
+  slug?: string;
+  rank?: number;
+  permissions: string[];
+}) {
+  return apiFetch<{ role: import("@/lib/auth/role-catalog").CustomRoleDefinition }>("/api/roles", {
+    method: "POST",
+    body: JSON.stringify(input),
+  });
+}
+
+export async function apiPatchRole(input: {
+  roleId: string;
+  patch: {
+    label?: string;
+    description?: string;
+    slug?: string;
+    rank?: number;
+    permissions?: string[];
+  };
+}) {
+  return apiFetch<{ role: import("@/lib/auth/role-catalog").CustomRoleDefinition }>("/api/roles", {
+    method: "PATCH",
+    body: JSON.stringify(input),
+  });
+}
+
+export async function apiDeleteRole(roleId: string) {
+  return apiFetch<{ ok: true }>(`/api/roles?id=${encodeURIComponent(roleId)}`, {
+    method: "DELETE",
   });
 }
 
@@ -387,4 +471,52 @@ export async function apiUpdateDeliveryStatus(
     method: "PATCH",
     body: JSON.stringify({ action: "status", orderId, status }),
   });
+}
+
+export async function apiFetchDrivers(opts?: { all?: boolean; locationId?: string }) {
+  const params = new URLSearchParams();
+  if (opts?.all) params.set("all", "1");
+  if (opts?.locationId) params.set("locationId", opts.locationId);
+  const qs = params.toString();
+  return apiFetch<{ drivers: import("@/types").Driver[] }>(`/api/drivers${qs ? `?${qs}` : ""}`);
+}
+
+export async function apiCreateDriver(input: {
+  name: string;
+  phone: string;
+  email?: string;
+  vehicle: string;
+  locationId: string;
+  photoUrl?: string;
+}) {
+  return apiFetch<{ driver: import("@/types").Driver }>("/api/drivers", {
+    method: "POST",
+    body: JSON.stringify(input),
+  });
+}
+
+export async function apiPatchDriver(
+  driverId: string,
+  patch: Partial<{
+    name: string;
+    phone: string;
+    email: string;
+    vehicle: string;
+    locationId: string;
+    photoUrl: string;
+    status: import("@/types").DriverStatus;
+    active: boolean;
+  }>,
+) {
+  return apiFetch<{ driver: import("@/types").Driver }>("/api/drivers", {
+    method: "PATCH",
+    body: JSON.stringify({ driverId, patch }),
+  });
+}
+
+export async function apiDeactivateDriver(driverId: string) {
+  return apiFetch<{ ok: true; driver: import("@/types").Driver }>(
+    `/api/drivers?id=${encodeURIComponent(driverId)}`,
+    { method: "DELETE" },
+  );
 }

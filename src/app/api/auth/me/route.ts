@@ -3,7 +3,7 @@ import { requireUser } from "@/lib/auth/require";
 import { mePatchSchema } from "@/lib/db/validators";
 import { redeemLoyaltyPoints, updateUserProfile, fetchUserById } from "@/lib/db/queries";
 import { updateOwnPassword, updateOwnProfileFields } from "@/lib/db/users";
-import { writeSessionCookie } from "@/lib/auth/session";
+import { applyAuthCookies, issueTokens } from "@/lib/auth/session";
 import { validatePassword } from "@/lib/auth/password";
 
 export async function GET() {
@@ -13,7 +13,7 @@ export async function GET() {
     return NextResponse.json({ user });
   } catch (error) {
     console.error("[GET /api/auth/me]", error);
-    return NextResponse.json({ error: "Failed to load session." }, { status: 500 });
+    return NextResponse.json({ error: "Failed to load auth profile." }, { status: 500 });
   }
 }
 
@@ -35,15 +35,29 @@ export async function PATCH(request: Request) {
     }
 
     const { patch } = parsed.data;
+    let passwordChanged = false;
     if (patch.password) {
       const passwordError = validatePassword(patch.password);
       if (passwordError) {
         return NextResponse.json({ error: passwordError }, { status: 400 });
       }
-      await updateOwnPassword(user.id, patch.password);
+      if (!patch.currentPassword) {
+        return NextResponse.json(
+          { error: "Enter your current password to change it." },
+          { status: 400 },
+        );
+      }
+      try {
+        await updateOwnPassword(user.id, patch.password, patch.currentPassword);
+        passwordChanged = true;
+      } catch (err) {
+        const message = err instanceof Error ? err.message : "Could not update password.";
+        return NextResponse.json({ error: message }, { status: 400 });
+      }
     }
-    const { password: _unusedPassword, ...profilePatch } = patch;
+    const { password: _unusedPassword, currentPassword: _unusedCurrent, ...profilePatch } = patch;
     void _unusedPassword;
+    void _unusedCurrent;
     const extrasPatch = {
       ...(profilePatch.name ? { name: profilePatch.name } : {}),
       ...(profilePatch.email ? { email: profilePatch.email } : {}),
@@ -68,11 +82,16 @@ export async function PATCH(request: Request) {
     const next = await fetchUserById(user.id);
     const payload = next ?? user;
     const res = NextResponse.json({ user: payload });
-    return writeSessionCookie(res, {
-      sub: payload.id,
-      email: payload.email,
-      role: payload.role,
-    });
+    // Re-issue JWTs when identity or password changes so claims stay fresh.
+    if (passwordChanged || extrasPatch.email || extrasPatch.name) {
+      const tokens = await issueTokens({
+        sub: payload.id,
+        email: payload.email,
+        role: payload.role,
+      });
+      return applyAuthCookies(res, tokens);
+    }
+    return res;
   } catch (error) {
     console.error("[PATCH /api/auth/me]", error);
     return NextResponse.json({ error: "Failed to update profile." }, { status: 500 });

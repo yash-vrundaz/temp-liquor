@@ -3,7 +3,7 @@ import { getAllLocations } from "@/data/locations";
 import type { StoreLocation } from "@/types";
 
 export type LocationAccessSubject = {
-  role: UserRole;
+  role: string;
   allowedLocationIds?: string[] | null;
 };
 
@@ -23,7 +23,7 @@ export function parseLocationIds(value: unknown): string[] | null {
 
 /** null = every store. Empty array is stored as null (all stores). */
 export function normalizeAllowedLocationIds(
-  role: UserRole,
+  role: string,
   ids?: readonly string[] | null,
 ): string[] | null {
   if (role === "owner" || role === "customer") return null;
@@ -51,7 +51,7 @@ export function accessibleLocations(subject: LocationAccessSubject, all = getAll
 
 export function sanitizeAssignedLocations(
   actor: LocationAccessSubject,
-  role: UserRole,
+  role: string,
   requested: readonly string[] | null | undefined,
   knownIds: readonly string[],
 ) {

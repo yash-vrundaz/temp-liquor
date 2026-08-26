@@ -1,5 +1,5 @@
 import { NextResponse } from "next/server";
-import { fetchAllProducts, createCustomProduct, updateCatalogProduct } from "@/lib/db/queries";
+import { fetchAllProducts, createCustomProduct, updateCatalogProduct, deleteCustomProduct } from "@/lib/db/queries";
 import { newBottleSchema, patchBottleSchema } from "@/lib/db/validators";
 import { requirePermission } from "@/lib/auth/require";
 
@@ -51,5 +51,24 @@ export async function PATCH(request: Request) {
   } catch (error) {
     console.error("[PATCH /api/products]", error);
     return NextResponse.json({ error: "Failed to update product." }, { status: 500 });
+  }
+}
+
+export async function DELETE(request: Request) {
+  try {
+    const { user, error } = await requirePermission("catalog.delete");
+    if (error) return error;
+    const productId = new URL(request.url).searchParams.get("id");
+    if (!productId) {
+      return NextResponse.json({ error: "Product id is required." }, { status: 400 });
+    }
+    const result = await deleteCustomProduct(productId, user.id);
+    if ("error" in result && result.error) {
+      return NextResponse.json({ error: result.error }, { status: result.status });
+    }
+    return NextResponse.json({ ok: true, id: result.id, inventory: result.inventory });
+  } catch (error) {
+    console.error("[DELETE /api/products]", error);
+    return NextResponse.json({ error: "Failed to delete product." }, { status: 500 });
   }
 }

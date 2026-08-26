@@ -4,6 +4,8 @@ import { useEffect } from "react";
 import { hydrateRuntimeData } from "@/lib/runtime-data";
 import { useInventoryStore } from "@/store/inventory";
 import { useUserStore } from "@/store/user";
+import { useWishlistStore } from "@/store/wishlist";
+import { useCartStore } from "@/store/cart";
 
 function whenHydrated(
   persistApi: { hasHydrated: () => boolean; onFinishHydration: (cb: () => void) => () => void },
@@ -41,7 +43,11 @@ export function DataBootstrap() {
         });
 
         if (data.inventory?.stocks) {
-          syncFromServer(data.inventory.stocks, data.inventory.seats);
+          syncFromServer(
+            data.inventory.stocks,
+            data.inventory.seats,
+            data.inventory.hidden,
+          );
         } else {
           setHydrated(true);
         }
@@ -54,11 +60,29 @@ export function DataBootstrap() {
     const unsubInventory = whenHydrated(useInventoryStore.persist, () => {
       void loadCatalog();
     });
+    const unsubWishlist = whenHydrated(useWishlistStore.persist, () => {
+      const { isLoggedIn, profile } = useUserStore.getState();
+      if (isLoggedIn) {
+        useWishlistStore.getState().bindUser(profile.id);
+      } else {
+        useWishlistStore.getState().unbindUser();
+      }
+    });
+    const unsubCart = whenHydrated(useCartStore.persist, () => {
+      const { isLoggedIn, profile } = useUserStore.getState();
+      if (isLoggedIn) {
+        useCartStore.getState().bindUser(profile.id);
+      } else {
+        useCartStore.getState().unbindUser();
+      }
+    });
     void hydrateSession();
 
     return () => {
       cancelled = true;
       unsubInventory();
+      unsubWishlist();
+      unsubCart();
     };
   }, [setHydrated, syncFromServer, hydrateSession]);
 

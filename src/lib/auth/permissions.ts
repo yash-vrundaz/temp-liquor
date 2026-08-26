@@ -1,4 +1,6 @@
 import type { UserRole } from "@/types";
+import { customRolePermissions } from "@/lib/auth/role-catalog";
+import { isBuiltInRole } from "@/lib/auth/role-catalog";
 
 export const PERMISSIONS = [
   "dashboard.access",
@@ -33,12 +35,12 @@ export type Permission = (typeof PERMISSIONS)[number];
 export type PermissionKind = "read" | "action";
 
 export type AccessSubject = {
-  role: UserRole;
+  role: string;
   permissionGrants?: readonly string[];
   permissionRevokes?: readonly string[];
 };
 
-export type AccessInput = UserRole | AccessSubject;
+export type AccessInput = string | AccessSubject;
 
 export const PERMISSION_META: Record<
   Permission,
@@ -197,8 +199,8 @@ export const PERMISSION_META: Record<
   "deliveries.manage": {
     group: "Deliveries",
     kind: "action",
-    label: "Assign drivers",
-    description: "Assign a store driver and update pickup, en route, and delivered",
+    label: "Manage deliveries",
+    description: "Assign drivers, update delivery status, and manage the driver roster",
   },
 };
 
@@ -292,12 +294,15 @@ export function asAccess(subject: AccessInput): AccessSubject {
   return typeof subject === "string" ? { role: subject } : subject;
 }
 
-export function rolePermissions(role: UserRole): Permission[] {
-  return [...(ROLE_PERMISSIONS[role] ?? [])];
+export function rolePermissions(role: string): Permission[] {
+  if (role === "owner") return [...PERMISSIONS];
+  if (isBuiltInRole(role)) return [...ROLE_PERMISSIONS[role]];
+  const custom = customRolePermissions(role);
+  return custom ? [...custom] : [];
 }
 
 export function normalizeOverrides(
-  role: UserRole,
+  role: string,
   grants: readonly string[] = [],
   revokes: readonly string[] = [],
 ) {
@@ -345,7 +350,7 @@ export function hasCustomPermissions(subject: AccessInput) {
   return permissionGrants.length > 0 || permissionRevokes.length > 0;
 }
 
-export function overridesFromEnabled(role: UserRole, enabled: readonly Permission[]) {
+export function overridesFromEnabled(role: string, enabled: readonly Permission[]) {
   if (role === "owner") {
     return { permissionGrants: [] as Permission[], permissionRevokes: [] as Permission[] };
   }

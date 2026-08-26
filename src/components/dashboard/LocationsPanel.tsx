@@ -21,7 +21,9 @@ import { Button } from "@/components/ui/Button";
 import { CoverImageUpload, GalleryImageUpload } from "@/components/ui/ImageUpload";
 import { Input } from "@/components/ui/Input";
 import { Modal } from "@/components/ui/Modal";
+import { ConnectionNotice } from "@/components/dashboard/ConnectionNotice";
 import { compareValues, MobileSortBar, SortableTh, tableCellClass, tableHeadRowClass, tableRowClass, tableWrapClass, useTableSort } from "@/components/ui/SortableTh";
+import { formatDeliveryPricingSummary } from "@/lib/fulfillment-pricing";
 
 type LocationForm = {
   name: string;
@@ -35,7 +37,11 @@ type LocationForm = {
   description: string;
   parking: string;
   pickupAvailable: boolean;
+  deliveryAvailable: boolean;
   deliveryRadiusKm: string;
+  deliveryFee: string;
+  deliveryFreeMinimum: string;
+  taxRatePercent: string;
   lat: string;
   lng: string;
   heroImage: string;
@@ -54,7 +60,11 @@ const emptyForm = (): LocationForm => ({
   description: "",
   parking: "",
   pickupAvailable: true,
+  deliveryAvailable: true,
   deliveryRadiusKm: "8",
+  deliveryFee: "12.5",
+  deliveryFreeMinimum: "150",
+  taxRatePercent: "8.875",
   lat: "",
   lng: "",
   heroImage: "",
@@ -74,6 +84,18 @@ function validateLocationForm(form: LocationForm) {
   if (form.deliveryRadiusKm.trim() && (!Number.isFinite(radius) || radius < 0 || radius > 200)) {
     return "Delivery radius must be between 0 and 200 km.";
   }
+  const deliveryFee = Number(form.deliveryFee);
+  if (!Number.isFinite(deliveryFee) || deliveryFee < 0 || deliveryFee > 500) {
+    return "Delivery fee must be between $0 and $500.";
+  }
+  const deliveryFreeMinimum = Number(form.deliveryFreeMinimum);
+  if (!Number.isFinite(deliveryFreeMinimum) || deliveryFreeMinimum < 0 || deliveryFreeMinimum > 10000) {
+    return "Free delivery minimum must be between $0 and $10,000.";
+  }
+  const taxRatePercent = Number(form.taxRatePercent);
+  if (!Number.isFinite(taxRatePercent) || taxRatePercent < 0 || taxRatePercent > 25) {
+    return "Tax rate must be between 0% and 25%.";
+  }
   if (form.lat.trim()) {
     const lat = Number(form.lat);
     if (!Number.isFinite(lat) || lat < -90 || lat > 90) return "Latitude must be between -90 and 90.";
@@ -91,6 +113,7 @@ function toLocationPayload(form: LocationForm) {
   const radius = Number(form.deliveryRadiusKm);
   const lat = form.lat.trim() ? Number(form.lat) : undefined;
   const lng = form.lng.trim() ? Number(form.lng) : undefined;
+  const taxRatePercent = Number(form.taxRatePercent);
   return {
     name: form.name.trim(),
     shortName: form.shortName.trim(),
@@ -103,7 +126,11 @@ function toLocationPayload(form: LocationForm) {
     description: form.description.trim(),
     parking: form.parking.trim(),
     pickupAvailable: form.pickupAvailable,
+    deliveryAvailable: form.deliveryAvailable,
     deliveryRadiusKm: Number.isFinite(radius) ? radius : 8,
+    deliveryFee: Number(form.deliveryFee),
+    deliveryFreeMinimum: Number(form.deliveryFreeMinimum),
+    taxRate: Number.isFinite(taxRatePercent) ? taxRatePercent / 100 : 0.08875,
     heroImage: form.heroImage.trim(),
     gallery: form.gallery,
     ...(lat != null && Number.isFinite(lat) ? { lat } : {}),
@@ -160,7 +187,11 @@ export function LocationsPanel() {
       description: location.description,
       parking: location.parking ?? "",
       pickupAvailable: location.pickupAvailable,
+      deliveryAvailable: location.deliveryAvailable,
       deliveryRadiusKm: String(location.deliveryRadiusKm ?? 8),
+      deliveryFee: String(location.deliveryFee ?? 12.5),
+      deliveryFreeMinimum: String(location.deliveryFreeMinimum ?? 150),
+      taxRatePercent: String(Number(((location.taxRate ?? 0.08875) * 100).toFixed(3))),
       lat: location.lat != null ? String(location.lat) : "",
       lng: location.lng != null ? String(location.lng) : "",
       heroImage: location.heroImage,
@@ -226,7 +257,7 @@ export function LocationsPanel() {
       <div className="flex flex-col gap-4 border-b border-white/10 pb-5 sm:flex-row sm:items-end sm:justify-between">
         <div>
           <h2 className="font-display text-2xl text-cream sm:text-3xl">Locations</h2>
-          <p className="mt-1 text-sm text-muted">Add or remove stores. Staff can be limited to specific locations from Users.</p>
+          <p className="mt-1 text-sm text-muted">Add or remove stores. Set delivery fees, free-delivery thresholds, and tax per location.</p>
         </div>
         {canCreate ? (
           <Button size="sm" onClick={openCreate}>
@@ -236,9 +267,7 @@ export function LocationsPanel() {
         ) : null}
       </div>
       {!dbReady ? (
-        <p className="mt-4 text-sm text-amber-200/90">
-          Connect the database to add, edit, or remove stores. Seed locations are view-only in demo mode.
-        </p>
+        <ConnectionNotice className="mt-4" feature="add or edit stores" preview />
       ) : null}
       {error ? <p className="mt-4 text-sm text-red-300">{error}</p> : null}
 
@@ -270,6 +299,7 @@ export function LocationsPanel() {
                 <p className="mt-1 text-xs text-muted">
                   {location.phone} · {location.email}
                 </p>
+                <p className="mt-2 text-[11px] text-gold">{formatDeliveryPricingSummary(location)}</p>
                 <div className="mt-3 flex flex-wrap gap-2">
                   {canEdit ? (
                     <Button size="sm" variant="ghost" className="h-9 px-2.5" onClick={() => openEdit(location)}>
@@ -308,6 +338,7 @@ export function LocationsPanel() {
             <tr className={tableHeadRowClass}>
               <SortableTh label="Store" column="store" sortKey={sortKey} sortDir={sortDir} onSort={toggleSort} />
               <SortableTh label="Address" column="address" sortKey={sortKey} sortDir={sortDir} onSort={toggleSort} />
+              <th className="px-4 py-3 font-medium">Delivery & tax</th>
               <SortableTh label="Contact" column="contact" sortKey={sortKey} sortDir={sortDir} onSort={toggleSort} />
               <th className="px-4 py-3 text-right font-medium">Actions</th>
             </tr>
@@ -331,6 +362,17 @@ export function LocationsPanel() {
                   <p>{location.address}</p>
                   <p>
                     {location.city}, {location.state} {location.zip}
+                  </p>
+                </td>
+                <td className={`${tableCellClass} text-xs`}>
+                  <p className="text-gold">{formatDeliveryPricingSummary(location)}</p>
+                  <p className="mt-1 text-muted">
+                    {location.deliveryAvailable
+                      ? `${location.deliveryRadiusKm} km radius`
+                      : "Delivery disabled"}
+                  </p>
+                  <p className="mt-1 text-muted">
+                    Tax {(location.taxRate * 100).toFixed(3).replace(/\.?0+$/, "")}%
                   </p>
                 </td>
                 <td className={`${tableCellClass} text-xs text-muted`}>
@@ -376,7 +418,7 @@ export function LocationsPanel() {
         onClose={() => setEditing(null)}
         title={editing === "new" ? "Add store" : "Edit store"}
         subtitle="This location appears in pickup, inventory, and events."
-        className="sm:max-w-xl"
+        className="sm:max-w-2xl"
       >
         <form onSubmit={save} className="grid gap-3 sm:grid-cols-2">
           <CoverImageUpload
@@ -492,6 +534,61 @@ export function LocationsPanel() {
             />
             Pickup available at this store
           </label>
+          <label className="flex min-h-11 items-center gap-3 text-sm text-cream sm:col-span-2">
+            <input
+              type="checkbox"
+              className="h-5 w-5 accent-(--gold)"
+              checked={form.deliveryAvailable}
+              onChange={(e) => setForm((f) => ({ ...f, deliveryAvailable: e.target.checked }))}
+            />
+            Delivery available from this store
+          </label>
+
+          <div className="sm:col-span-2">
+            <p className="text-[10px] uppercase tracking-[0.18em] text-gold">Delivery & pricing</p>
+            <p className="mt-1 text-xs text-muted">
+              Cart, checkout, and orders use these rates for this store only.
+            </p>
+          </div>
+          <label className="block text-xs text-muted">
+            Delivery fee ($)
+            <Input
+              className="mt-1"
+              type="number"
+              min={0}
+              max={500}
+              step={0.01}
+              value={form.deliveryFee}
+              disabled={!form.deliveryAvailable}
+              onChange={(e) => setForm((f) => ({ ...f, deliveryFee: e.target.value }))}
+            />
+          </label>
+          <label className="block text-xs text-muted">
+            Free delivery over ($)
+            <Input
+              className="mt-1"
+              type="number"
+              min={0}
+              max={10000}
+              step={1}
+              value={form.deliveryFreeMinimum}
+              disabled={!form.deliveryAvailable}
+              onChange={(e) => setForm((f) => ({ ...f, deliveryFreeMinimum: e.target.value }))}
+            />
+            <span className="mt-1 block text-[10px] text-muted/80">Use 0 if delivery is never free.</span>
+          </label>
+          <label className="block text-xs text-muted">
+            Tax rate (%)
+            <Input
+              className="mt-1"
+              type="number"
+              min={0}
+              max={25}
+              step={0.001}
+              value={form.taxRatePercent}
+              onChange={(e) => setForm((f) => ({ ...f, taxRatePercent: e.target.value }))}
+            />
+          </label>
           <label className="block text-xs text-muted">
             Delivery radius (km)
             <Input
@@ -501,6 +598,7 @@ export function LocationsPanel() {
               max={200}
               step={0.5}
               value={form.deliveryRadiusKm}
+              disabled={!form.deliveryAvailable}
               onChange={(e) => setForm((f) => ({ ...f, deliveryRadiusKm: e.target.value }))}
             />
           </label>

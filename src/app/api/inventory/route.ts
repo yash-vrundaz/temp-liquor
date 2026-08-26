@@ -5,6 +5,7 @@ import {
   fetchInventoryState,
   resetInventory,
   setInventoryOnHand,
+  setProductVisibility,
 } from "@/lib/db/queries";
 import { inventoryPatchSchema } from "@/lib/db/validators";
 import { requirePermission } from "@/lib/auth/require";
@@ -33,9 +34,11 @@ export async function PATCH(request: Request) {
     const permissionKey =
       body.action === "reset"
         ? ("inventory.reset" as const)
-        : needsRestock
-          ? ("inventory.restock" as const)
-          : ("inventory.adjust" as const);
+        : body.action === "visibility"
+          ? ("inventory.adjust" as const)
+          : needsRestock
+            ? ("inventory.restock" as const)
+            : ("inventory.adjust" as const);
     const allowed = await requirePermission(permissionKey);
     if (allowed.error) return allowed.error;
     const actorUserId = allowed.user.id;
@@ -86,6 +89,16 @@ export async function PATCH(request: Request) {
         return NextResponse.json({ ok: false, shortfalls: result.shortfalls }, { status: 409 });
       }
       return NextResponse.json({ ok: true });
+    }
+
+    if (body.action === "visibility") {
+      const result = await setProductVisibility(
+        body.locationId,
+        body.productId,
+        body.hidden,
+        actorUserId,
+      );
+      return NextResponse.json({ ok: true, ...result });
     }
 
     await resetInventory(body.locationId, actorUserId);

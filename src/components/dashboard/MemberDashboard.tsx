@@ -50,7 +50,7 @@ import { ProfilePanel } from "@/components/dashboard/ProfilePanel";
 import { DeliveriesPanel } from "@/components/dashboard/DeliveriesPanel";
 import { hasPermission, type Permission } from "@/lib/auth/permissions";
 import { accessibleLocations, canAccessLocation, hasAllLocationAccess } from "@/lib/auth/location-access";
-import { ROLE_LABELS } from "@/lib/auth/roles";
+import { roleLabel } from "@/lib/auth/roles";
 import { formatPrice } from "@/lib/utils";
 import { compareValues, MobileSortBar, SortableTh, tableHeadRowClass, tableWrapClass, useTableSort } from "@/components/ui/SortableTh";
 import {
@@ -752,6 +752,7 @@ export function MemberDashboard() {
   const setDashboardTab = useCallback((tab: DashboardTab) => {
     const params = new URLSearchParams(searchParams.toString());
     params.set("tab", tab);
+    params.delete("section");
     const qs = params.toString();
     router.replace(qs ? `${pathname}?${qs}` : pathname, { scroll: false });
   }, [pathname, router, searchParams]);
@@ -772,6 +773,10 @@ export function MemberDashboard() {
   }, [branchId, profile]);
 
   useEffect(() => {
+    if (requestedTab === "drivers") {
+      router.replace("/dashboard?tab=deliveries&section=drivers");
+      return;
+    }
     if (openCategoriesInInventory) {
       router.replace("/dashboard?tab=inventory");
       return;
@@ -881,7 +886,7 @@ export function MemberDashboard() {
         <div className="flex flex-col gap-3">
           <div className="min-w-0">
             <p className="text-[10px] uppercase tracking-[0.28em] text-gold">
-              {ROLE_LABELS[profile.role]} ·{" "}
+              {roleLabel(profile.role)} ·{" "}
               {dashboardTab === "inventory"
                 ? "Inventory"
                 : dashboardTab === "activity"

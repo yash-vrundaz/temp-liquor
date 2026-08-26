@@ -2,16 +2,18 @@ import { NextResponse } from "next/server";
 import { fetchUserById } from "@/lib/db/queries";
 import { isStaffRole } from "@/lib/auth/roles";
 import { PERMISSION_META, hasPermission, type Permission } from "@/lib/auth/permissions";
-import { getSession } from "@/lib/auth/session";
+import { getAuthClaims } from "@/lib/auth/session";
+import { warmRoleCatalog } from "@/lib/db/roles-admin";
 import type { UserProfile } from "@/types";
 
 type AuthOk = { user: UserProfile; error: null };
 type AuthErr = { user: null; error: NextResponse };
 
 export async function getRequestUser(): Promise<UserProfile | null> {
-  const session = await getSession();
-  if (!session) return null;
-  const user = await fetchUserById(session.sub);
+  const claims = await getAuthClaims();
+  if (!claims) return null;
+  await warmRoleCatalog();
+  const user = await fetchUserById(claims.sub);
   if (!user || user.active === false) return null;
   return user;
 }

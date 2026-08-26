@@ -9,7 +9,7 @@ import { getAllLocations } from "@/data/locations";
 import { useInventoryStore } from "@/store/inventory";
 import { isDbConnected } from "@/lib/runtime-data";
 import { upsertRuntimeProduct } from "@/lib/runtime-data";
-import { apiCreateProduct, apiPatchProduct } from "@/lib/api-mutations";
+import { apiCreateProduct, apiPatchProduct, apiDeleteProduct } from "@/lib/api-mutations";
 
 export type { NewBottleInput } from "@/types";
 
@@ -18,7 +18,7 @@ type CatalogState = {
   revision: number;
   addBottle: (input: NewBottleInput) => Promise<Product | { error: string }>;
   updateBottle: (productId: string, input: BottlePatch) => Promise<Product | { error: string }>;
-  removeBottle: (productId: string) => boolean;
+  removeBottle: (productId: string) => Promise<boolean>;
   bumpRevision: () => void;
   allProducts: () => Product[];
 };
@@ -138,7 +138,7 @@ export const useCatalogStore = create<CatalogState>()(
             set({ custom: next, revision: get().revision + 1 });
             upsertRuntimeProduct(saved);
             if (inventory) {
-              useInventoryStore.getState().syncFromServer(inventory.stocks, inventory.seats);
+              useInventoryStore.getState().syncFromServer(inventory.stocks, inventory.seats, inventory.hidden);
             }
             return saved;
           } catch (error) {
@@ -235,8 +235,23 @@ export const useCatalogStore = create<CatalogState>()(
         set({ custom: next, revision: get().revision + 1 });
         return updated;
       },
-      removeBottle: (productId) => {
+      removeBottle: async (productId) => {
         if (isCatalogProduct(productId)) return false;
+        if (isDbConnected()) {
+          try {
+            const result = await apiDeleteProduct(productId);
+            const next = get().custom.filter((p) => p.id !== productId);
+            syncRegistry(next);
+            set({ custom: next, revision: get().revision + 1 });
+            if (result.inventory) {
+              useInventoryStore.getState().syncFromServer(result.inventory.stocks, result.inventory.seats, result.inventory.hidden);
+            }
+            return true;
+          } catch (error) {
+            console.error(error);
+            return false;
+          }
+        }
         const next = get().custom.filter((p) => p.id !== productId);
         if (next.length === get().custom.length) return false;
         syncRegistry(next);

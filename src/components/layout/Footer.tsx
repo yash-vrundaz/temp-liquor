@@ -60,7 +60,7 @@ export function Footer() {
               </li>
             ) : null}
             <li>
-              <Link href="/checkout" className="hover:text-[var(--cream)]">
+              <Link href="/locations" className="hover:text-[var(--cream)]">
                 Pickup & Delivery
               </Link>
             </li>

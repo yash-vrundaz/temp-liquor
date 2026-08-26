@@ -4,6 +4,8 @@ import { usePathname } from "next/navigation";
 import { Header } from "@/components/layout/Header";
 import { Footer } from "@/components/layout/Footer";
 import { CartAddedToast } from "@/components/cart/CartAddedToast";
+import { WishlistAddedToast } from "@/components/wishlist/WishlistAddedToast";
+import { AgeGate } from "@/components/layout/AgeGate";
 
 export function SiteChrome({ children }: { children: React.ReactNode }) {
   const pathname = usePathname();
@@ -33,6 +35,8 @@ export function SiteChrome({ children }: { children: React.ReactNode }) {
       </main>
       {!immersive && <Footer />}
       <CartAddedToast />
+      <WishlistAddedToast />
+      <AgeGate />
     </>
   );
 }

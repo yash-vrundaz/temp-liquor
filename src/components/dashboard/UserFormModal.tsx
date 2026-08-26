@@ -1,7 +1,7 @@
 "use client";
 
 import { FormEvent, useEffect, useState } from "react";
-import { ROLE_BLURBS, ROLE_LABELS, canAssignRole, isDemoAccountEmail } from "@/lib/auth/roles";
+import { ROLE_BLURBS, canAssignRole, isDemoAccountEmail, roleBlurb, roleLabel } from "@/lib/auth/roles";
 import {
   PERMISSIONS,
   effectivePermissions,
@@ -11,7 +11,7 @@ import {
 } from "@/lib/auth/permissions";
 import { UserPermissionEditor } from "@/components/dashboard/UserPermissionEditor";
 import { LocationAccessFields } from "@/components/dashboard/LocationAccessFields";
-import type { ManagedUser, UserProfile, UserRole } from "@/types";
+import type { ManagedUser, UserProfile } from "@/types";
 import { AvatarUpload } from "@/components/ui/AvatarUpload";
 import { Button } from "@/components/ui/Button";
 import { Input } from "@/components/ui/Input";
@@ -23,7 +23,7 @@ export type UserFormValues = {
   name: string;
   email: string;
   password: string;
-  role: UserRole;
+  role: string;
   avatarUrl: string;
   permissionGrants: Permission[];
   permissionRevokes: Permission[];
@@ -33,7 +33,7 @@ export type UserFormValues = {
 type Props = {
   open: boolean;
   mode: "create" | "edit";
-  assignableRoles: UserRole[];
+  assignableRoles: string[];
   initial?: Partial<ManagedUser>;
   actor: UserProfile;
   actorId?: string;
@@ -44,7 +44,7 @@ type Props = {
   onSubmit: (values: UserFormValues) => Promise<void> | void;
 };
 
-const emptyRole: UserRole = "staff";
+const emptyRole = "staff";
 
 export function UserFormModal({
   open,
@@ -176,7 +176,7 @@ export function UserFormModal({
                     value={form.role}
                     onChange={(value) =>
                       setForm((f) => {
-                        const nextRole = value as UserRole;
+                        const nextRole = value;
                         if (nextRole === "owner") {
                           return {
                             ...f,
@@ -196,15 +196,15 @@ export function UserFormModal({
                         };
                       })
                     }
-                    options={assignableRoles.map((r) => ({ value: r, label: ROLE_LABELS[r] }))}
+                    options={assignableRoles.map((r) => ({ value: r, label: roleLabel(r) }))}
                   />
                 ) : (
-                  <Input className="mt-0" value={ROLE_LABELS[form.role]} disabled />
+                  <Input className="mt-0" value={roleLabel(form.role)} disabled />
                 )}
               </div>
             </label>
           </div>
-          <p className="text-[12px] text-muted">{ROLE_BLURBS[form.role]}</p>
+          <p className="text-[12px] text-muted">{roleBlurb(form.role) || ROLE_BLURBS.staff}</p>
           {demoLocked ? (
             <p className="text-xs text-muted">Demo account email is locked so the shared logins keep working.</p>
           ) : null}

@@ -26,7 +26,7 @@ const patchSchema = z.discriminatedUnion("action", [
 ]);
 
 async function assertOrderLocationAccess(
-  user: { role: import("@/types").UserRole; allowedLocationIds?: string[] | null },
+  user: { role: string; allowedLocationIds?: string[] | null },
   orderId: string,
 ) {
   const rows = await prisma.$queryRawUnsafe<{ location_id: string; fulfillment: string }[]>(
@@ -49,7 +49,10 @@ export async function GET() {
       return NextResponse.json({ drivers: seedDrivers, orders: [] });
     }
     const [drivers, orders] = await Promise.all([listDrivers(), listDeliveryOrders(user)]);
-    return NextResponse.json({ drivers, orders });
+    return NextResponse.json({
+      drivers: drivers.filter((driver) => canAccessLocation(user, driver.locationId)),
+      orders,
+    });
   } catch (err) {
     console.error("[GET /api/deliveries]", err);
     return NextResponse.json({ error: "Failed to load deliveries." }, { status: 500 });
@@ -75,9 +78,14 @@ export async function PATCH(request: Request) {
     return NextResponse.json({ orderId: parsed.data.orderId, status: parsed.data.status });
   } catch (err) {
     console.error("[PATCH /api/deliveries]", err);
-    return NextResponse.json(
-      { error: err instanceof Error ? err.message : "Failed to update delivery." },
-      { status: 500 },
-    );
+    const message = err instanceof Error ? err.message : "Failed to update delivery.";
+    const status = message === "Order not found."
+      ? 404
+      : message.includes("do not have access")
+        ? 403
+        : message.includes("Only delivery")
+          ? 400
+          : 500;
+    return NextResponse.json({ error: message }, { status });
   }
 }

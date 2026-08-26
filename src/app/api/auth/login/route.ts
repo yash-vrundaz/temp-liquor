@@ -2,7 +2,7 @@ import { NextResponse } from "next/server";
 import { authenticateUser } from "@/lib/db/users";
 import { recordActivity } from "@/lib/db/activity";
 import { loginSchema } from "@/lib/db/validators";
-import { writeSessionCookie } from "@/lib/auth/session";
+import { applyAuthCookies, issueTokens } from "@/lib/auth/session";
 import { clientIp, rateLimit, tooManyRequests } from "@/lib/rate-limit";
 
 export async function POST(request: Request) {
@@ -27,8 +27,18 @@ export async function POST(request: Request) {
       entityId: user.id,
       summary: `${user.name} signed in as ${user.role}`,
     });
-    const res = NextResponse.json({ user });
-    return writeSessionCookie(res, { sub: user.id, email: user.email, role: user.role });
+    const tokens = await issueTokens({
+      sub: user.id,
+      email: user.email,
+      role: user.role,
+    });
+    const res = NextResponse.json({
+      user,
+      accessToken: tokens.accessToken,
+      tokenType: tokens.tokenType,
+      expiresIn: tokens.expiresIn,
+    });
+    return applyAuthCookies(res, tokens);
   } catch (error) {
     console.error("[POST /api/auth/login]", error);
     return NextResponse.json({ error: "Login failed." }, { status: 500 });

@@ -11,7 +11,7 @@ import { useUserStore } from "@/store/user";
 import { getPriceForLocation, getAllLocations } from "@/data/locations";
 import { getProductById } from "@/data/products";
 import { analyzeCartAvailability } from "@/lib/cart-availability";
-import { calculateShipping, calculateTax, formatPrice, formatUsPhone, isUsPhone } from "@/lib/utils";
+import { calculateShipping, calculateTax, formatPrice, formatUsPhone, isUsPhone, amountUntilFreeDelivery, formatDeliveryPricingSummary } from "@/lib/utils";
 import { useInventoryStore } from "@/store/inventory";
 import type { DeliveryAddress, Order } from "@/types";
 import { Button } from "@/components/ui/Button";
@@ -227,6 +227,14 @@ export default function CheckoutPage() {
     }
   }, [items.length, confirmed, router]);
 
+  useEffect(() => {
+    if (fulfillment === "delivery" && !branch.deliveryAvailable) {
+      setFulfillment("pickup");
+    } else if (fulfillment === "pickup" && !branch.pickupAvailable && branch.deliveryAvailable) {
+      setFulfillment("delivery");
+    }
+  }, [branch.deliveryAvailable, branch.pickupAvailable, fulfillment, setFulfillment]);
+
   const availability = analyzeCartAvailability(items, branchId);
   void inventoryRevision;
 
@@ -241,8 +249,9 @@ export default function CheckoutPage() {
     return n + getPriceForLocation(branchId, p.id) * i.quantity;
   }, 0);
   const discount = getCouponDiscount(coupon, subtotal);
-  const shipping = calculateShipping(subtotal - discount, fulfillment);
-  const tax = calculateTax(subtotal - discount);
+  const shipping = calculateShipping(subtotal - discount, fulfillment, branch);
+  const tax = calculateTax(subtotal - discount, branch);
+  const freeDeliveryGap = amountUntilFreeDelivery(subtotal - discount, branch);
   const total = subtotal - discount + shipping + tax;
 
   const delivery: DeliveryAddress = useMemo(
@@ -338,12 +347,13 @@ export default function CheckoutPage() {
           locationId: branchId,
           fulfillment,
           coupon,
+          ageConfirmed: true,
           delivery: fulfillment === "delivery" ? delivery : undefined,
           items: items.map((i) => ({ productId: i.productId, quantity: i.quantity })),
         });
         useInventoryStore
           .getState()
-          .syncFromServer(result.inventory.stocks, result.inventory.seats);
+          .syncFromServer(result.inventory.stocks, result.inventory.seats, result.inventory.hidden);
         addOrder(result.order, { loyaltyPoints: result.loyaltyPoints });
         if (result.order.fulfillment === "delivery") {
           useDeliveryStore.getState().attach(result.order.id, delivery);
@@ -561,21 +571,32 @@ export default function CheckoutPage() {
 
           <Section title="Fulfillment">
             <div className="inline-flex w-full rounded-sm border border-white/10 p-0.5 sm:w-auto">
-              {(["delivery", "pickup"] as const).map((mode) => (
-                <button
-                  key={mode}
-                  type="button"
-                  onClick={() => setFulfillment(mode)}
-                  className={`flex-1 rounded-sm px-4 py-1.5 text-sm capitalize sm:flex-none ${
-                    fulfillment === mode
-                      ? "bg-[var(--gold)]/20 text-cream"
-                      : "text-muted hover:text-cream"
-                  }`}
-                >
-                  {mode}
-                </button>
-              ))}
+              {(["delivery", "pickup"] as const).map((mode) => {
+                const disabled =
+                  mode === "delivery" ? !branch.deliveryAvailable : !branch.pickupAvailable;
+                return (
+                  <button
+                    key={mode}
+                    type="button"
+                    disabled={disabled}
+                    onClick={() => setFulfillment(mode)}
+                    className={`flex-1 rounded-sm px-4 py-1.5 text-sm capitalize sm:flex-none disabled:cursor-not-allowed disabled:opacity-40 ${
+                      fulfillment === mode
+                        ? "bg-[var(--gold)]/20 text-cream"
+                        : "text-muted hover:text-cream"
+                    }`}
+                  >
+                    {mode}
+                  </button>
+                );
+              })}
             </div>
+            <p className="mt-2 text-xs text-muted">
+              {branch.shortName}: {formatDeliveryPricingSummary(branch)}
+              {branch.deliveryAvailable && branch.taxRate
+                ? ` · Tax ${(branch.taxRate * 100).toFixed(3).replace(/\.?0+$/, "")}%`
+                : ""}
+            </p>
 
             <div className="mt-3 flex flex-wrap gap-2">
               {getAllLocations().map((loc) => {
@@ -886,6 +907,11 @@ export default function CheckoutPage() {
               <span className="text-muted">Shipping</span>
               <span>{shipping === 0 ? "Free" : formatPrice(shipping)}</span>
             </div>
+            {fulfillment === "delivery" && freeDeliveryGap != null ? (
+              <p className="text-[10px] leading-relaxed text-muted">
+                Add {formatPrice(freeDeliveryGap)} more for free delivery from {branch.shortName}.
+              </p>
+            ) : null}
             <div className="flex justify-between">
               <span className="text-muted">Tax</span>
               <span>{formatPrice(tax)}</span>

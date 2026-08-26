@@ -6,7 +6,7 @@ import { AnimatePresence, motion } from "framer-motion";
 import { ChevronDown, LayoutDashboard, LogOut, UserRound } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { UserAvatar } from "@/components/ui/UserAvatar";
-import { ROLE_LABELS } from "@/lib/auth/roles";
+import { roleLabel } from "@/lib/auth/roles";
 import type { UserProfile } from "@/types";
 
 type Props = {
@@ -72,7 +72,7 @@ export function AccountMenu({
             <div className="border-b border-white/10 px-3 py-2.5">
               <p className="truncate text-sm text-cream">{profile.name}</p>
               <p className="mt-0.5 truncate text-[11px] uppercase tracking-[0.14em] text-gold/80">
-                {ROLE_LABELS[profile.role]}
+                {roleLabel(profile.role)}
               </p>
             </div>
             <div className="py-1">

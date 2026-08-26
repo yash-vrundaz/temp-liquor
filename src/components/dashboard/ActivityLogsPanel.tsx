@@ -11,6 +11,8 @@ import { format, formatDistanceToNow } from "date-fns";
 import { apiFetchActivity, apiFetchUsers } from "@/lib/api-mutations";
 import { getAllLocations } from "@/data/locations";
 import { isDbConnected } from "@/lib/runtime-data";
+import { isConnectionError } from "@/lib/connection-messages";
+import { ConnectionNotice } from "@/components/dashboard/ConnectionNotice";
 import { hasPermission } from "@/lib/auth/permissions";
 import { useUserStore } from "@/store/user";
 import type { ActivityLogEntry } from "@/types";
@@ -30,6 +32,7 @@ const ENTITY_LABELS: Record<string, string> = {
   event: "Event",
   location: "Location",
   profile: "Profile",
+  driver: "Driver",
 };
 
 const ACTION_LABELS: Record<string, string> = {
@@ -41,14 +44,19 @@ const ACTION_LABELS: Record<string, string> = {
   "inventory.adjust": "Stock adjusted",
   "inventory.restock": "Restocked",
   "inventory.reset": "Inventory reset",
+  "inventory.visibility": "Bottle visibility",
   "catalog.created": "Bottle added",
   "catalog.updated": "Bottle updated",
+  "catalog.deleted": "Bottle removed",
   "category.created": "Category added",
   "category.updated": "Category updated",
   "category.deleted": "Category removed",
   "event.booked": "Event booked",
   "user.created": "User created",
   "user.role_updated": "Role changed",
+  "role.created": "Role created",
+  "role.updated": "Role updated",
+  "role.deleted": "Role deleted",
   "user.deactivated": "User deactivated",
   "user.activated": "User activated",
   "user.password_reset": "Password reset",
@@ -61,6 +69,11 @@ const ACTION_LABELS: Record<string, string> = {
   "event.created": "Event added",
   "event.updated": "Event updated",
   "event.deleted": "Event removed",
+  "delivery.assigned": "Driver assigned",
+  "delivery.status": "Delivery status",
+  "driver.created": "Driver added",
+  "driver.updated": "Driver updated",
+  "driver.deactivated": "Driver deactivated",
 };
 
 const ACTION_TONE: Record<string, string> = {
@@ -72,14 +85,19 @@ const ACTION_TONE: Record<string, string> = {
   "inventory.adjust": "border-(--gold)/30 bg-(--gold)/10 text-gold",
   "inventory.restock": "border-emerald-400/30 bg-emerald-400/10 text-emerald-200",
   "inventory.reset": "border-white/20 bg-white/5 text-cream",
+  "inventory.visibility": "border-(--gold)/30 bg-(--gold)/10 text-gold",
   "catalog.created": "border-violet-400/30 bg-violet-400/10 text-violet-200",
   "catalog.updated": "border-violet-400/30 bg-violet-400/10 text-violet-200",
+  "catalog.deleted": "border-(--danger)/30 bg-(--danger)/10 text-(--danger)",
   "category.created": "border-violet-400/30 bg-violet-400/10 text-violet-200",
   "category.updated": "border-violet-400/30 bg-violet-400/10 text-violet-200",
   "category.deleted": "border-(--danger)/30 bg-(--danger)/10 text-(--danger)",
   "event.booked": "border-amber-400/30 bg-amber-400/10 text-amber-200",
   "user.created": "border-violet-400/30 bg-violet-400/10 text-violet-200",
   "user.role_updated": "border-violet-400/30 bg-violet-400/10 text-violet-200",
+  "role.created": "border-emerald-400/30 bg-emerald-400/10 text-emerald-200",
+  "role.updated": "border-emerald-400/30 bg-emerald-400/10 text-emerald-200",
+  "role.deleted": "border-red-400/30 bg-red-400/10 text-red-200",
   "user.deactivated": "border-(--danger)/30 bg-(--danger)/10 text-(--danger)",
   "user.activated": "border-emerald-400/30 bg-emerald-400/10 text-emerald-200",
   "user.password_reset": "border-white/20 bg-white/5 text-muted",
@@ -203,7 +221,7 @@ export function ActivityLogsPanel() {
       setLogs([]);
       setTotal(0);
       setLoading(false);
-      setError("Connect PostgreSQL to store and view activity logs.");
+      setError("");
       return;
     }
     setLoading(true);
@@ -234,7 +252,8 @@ export function ActivityLogsPanel() {
         return next;
       });
     } catch (err) {
-      setError(err instanceof Error ? err.message : "Could not load activity.");
+      const message = err instanceof Error ? err.message : "Could not load activity.";
+      setError(isConnectionError(message) ? "" : message);
     } finally {
       setLoading(false);
     }
@@ -277,94 +296,61 @@ export function ActivityLogsPanel() {
         </Button>
       </div>
 
-      <div className="mt-5 grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
-        <label className="sm:col-span-2 lg:col-span-4">
-          <span className="text-xs text-muted">Search</span>
-          <div className="relative mt-1">
-            <Search size={14} className="pointer-events-none absolute left-3 top-1/2 -translate-y-1/2 text-muted" />
-            <Input
-              className="py-2 pl-9"
-              placeholder="Search name, email, entity id, summary…"
-              value={q}
-              onChange={(e) => setQ(e.target.value)}
-              onKeyDown={(e) => {
-                if (e.key === "Enter") {
-                  setPage(1);
-                  void load(1);
-                }
-              }}
-            />
-          </div>
-        </label>
-        <Select
-          className="sm:col-span-2 lg:col-span-2"
-          label="Date range"
-          value={datePreset}
-          onChange={(value) => {
-            const preset = value as DatePreset;
-            setDatePreset(preset);
-            if (preset === "custom") return;
-            const next = rangeForPreset(preset);
-            setFromDate(next.fromDate);
-            setToDate(next.toDate);
-          }}
-          options={[
-            { value: "all", label: "All time" },
-            { value: "today", label: "Today" },
-            { value: "7d", label: "Last 7 days" },
-            { value: "30d", label: "Last 30 days" },
-            { value: "month", label: "This month" },
-            { value: "custom", label: "Custom range" },
-          ]}
-        />
-        <div className="flex items-end sm:col-span-2 lg:col-span-2">
-          <Button
-            type="button"
-            size="sm"
-            variant="secondary"
-            className="min-h-11 w-full"
-            onClick={() => setFiltersOpen((v) => !v)}
-            aria-expanded={filtersOpen}
-          >
-            {filtersOpen ? "Hide filters" : "More filters"}
-          </Button>
-        </div>
-        {(filtersOpen || datePreset === "custom") && (
-          <>
-            <label className="block text-xs text-muted">
-              From
+      {!isDbConnected() ? (
+        <ConnectionNotice className="mt-5" feature="view activity history" />
+      ) : null}
+
+      <div className="mt-5 space-y-3">
+        <div className="grid gap-2 sm:grid-cols-[minmax(0,1.4fr)_minmax(0,0.9fr)_auto] lg:grid-cols-[minmax(0,1.6fr)_minmax(10rem,0.7fr)_minmax(10rem,0.7fr)_minmax(10rem,0.7fr)_auto]">
+          <label className="min-w-0 sm:col-span-3 lg:col-span-1">
+            <span className="sr-only">Search</span>
+            <div className="relative">
+              <Search
+                size={14}
+                className="pointer-events-none absolute left-3 top-1/2 -translate-y-1/2 text-muted"
+              />
               <Input
-                className="mt-1 py-2 scheme-dark"
-                type="date"
-                value={fromDate}
-                max={toDate || undefined}
-                onChange={(e) => {
-                  setFromDate(e.target.value);
-                  setDatePreset("custom");
+                className="py-2 pl-9"
+                placeholder="Search activity…"
+                value={q}
+                onChange={(e) => setQ(e.target.value)}
+                onKeyDown={(e) => {
+                  if (e.key === "Enter") {
+                    setPage(1);
+                    void load(1);
+                  }
                 }}
               />
-            </label>
-            <label className="block text-xs text-muted">
-              To
-              <Input
-                className="mt-1 py-2 scheme-dark"
-                type="date"
-                value={toDate}
-                min={fromDate || undefined}
-                onChange={(e) => {
-                  setToDate(e.target.value);
-                  setDatePreset("custom");
-                }}
-              />
-            </label>
-          </>
-        )}
-        {filtersOpen ? (
-          <>
+            </div>
+          </label>
+          <Select
+            value={datePreset}
+            ariaLabel="Date range"
+            onChange={(value) => {
+              const preset = value as DatePreset;
+              setDatePreset(preset);
+              if (preset === "custom") {
+                setFiltersOpen(true);
+                return;
+              }
+              const next = rangeForPreset(preset);
+              setFromDate(next.fromDate);
+              setToDate(next.toDate);
+            }}
+            options={[
+              { value: "all", label: "All time" },
+              { value: "today", label: "Today" },
+              { value: "7d", label: "Last 7 days" },
+              { value: "30d", label: "Last 30 days" },
+              { value: "month", label: "This month" },
+              { value: "custom", label: "Custom range" },
+            ]}
+          />
+          <div className="hidden lg:contents">
             <Select
-              label="Action"
               value={action}
               onChange={setAction}
+              ariaLabel="Action"
               options={[
                 { value: "all", label: "All actions" },
                 ...Object.entries(ACTION_LABELS).map(([id, label]) => ({
@@ -374,9 +360,9 @@ export function ActivityLogsPanel() {
               ]}
             />
             <Select
-              label="Entity"
               value={entityType}
               onChange={setEntityType}
+              ariaLabel="Entity"
               options={[
                 { value: "all", label: "All entities" },
                 ...Object.entries(ENTITY_LABELS).map(([id, label]) => ({
@@ -385,6 +371,83 @@ export function ActivityLogsPanel() {
                 })),
               ]}
             />
+          </div>
+          <button
+            type="button"
+            onClick={() => setFiltersOpen((v) => !v)}
+            aria-expanded={filtersOpen}
+            className="inline-flex min-h-11 items-center justify-center gap-1.5 rounded-sm border border-white/10 px-3 text-[11px] uppercase tracking-[0.14em] text-muted transition hover:border-(--gold)/40 hover:text-cream"
+          >
+            {filtersOpen ? "Less" : "Filters"}
+            {(action !== "all" ||
+              entityType !== "all" ||
+              locationId !== "all" ||
+              actor !== "all" ||
+              datePreset === "custom") &&
+            !filtersOpen ? (
+              <span className="h-1.5 w-1.5 rounded-full bg-gold" aria-hidden />
+            ) : null}
+          </button>
+        </div>
+
+        {filtersOpen || datePreset === "custom" ? (
+          <div className="grid gap-2 sm:grid-cols-2 lg:grid-cols-4">
+            {datePreset === "custom" ? (
+              <>
+                <label className="block text-xs text-muted">
+                  From
+                  <Input
+                    className="mt-1 py-2 scheme-dark"
+                    type="date"
+                    value={fromDate}
+                    max={toDate || undefined}
+                    onChange={(e) => {
+                      setFromDate(e.target.value);
+                      setDatePreset("custom");
+                    }}
+                  />
+                </label>
+                <label className="block text-xs text-muted">
+                  To
+                  <Input
+                    className="mt-1 py-2 scheme-dark"
+                    type="date"
+                    value={toDate}
+                    min={fromDate || undefined}
+                    onChange={(e) => {
+                      setToDate(e.target.value);
+                      setDatePreset("custom");
+                    }}
+                  />
+                </label>
+              </>
+            ) : null}
+            <div className="contents lg:hidden">
+              <Select
+                label="Action"
+                value={action}
+                onChange={setAction}
+                options={[
+                  { value: "all", label: "All actions" },
+                  ...Object.entries(ACTION_LABELS).map(([id, label]) => ({
+                    value: id,
+                    label,
+                  })),
+                ]}
+              />
+              <Select
+                label="Entity"
+                value={entityType}
+                onChange={setEntityType}
+                options={[
+                  { value: "all", label: "All entities" },
+                  ...Object.entries(ENTITY_LABELS).map(([id, label]) => ({
+                    value: id,
+                    label,
+                  })),
+                ]}
+              />
+            </div>
             <Select
               label="Location"
               value={locationId}
@@ -412,7 +475,7 @@ export function ActivityLogsPanel() {
                   })),
               ]}
             />
-          </>
+          </div>
         ) : null}
       </div>
 

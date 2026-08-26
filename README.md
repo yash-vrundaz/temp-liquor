@@ -55,8 +55,9 @@ Re-seeding updates catalog copy only. Live stock, event seats, loyalty points, a
 | `GET /api/activity` | Audit trail (staff+) |
 | `GET /api/inventory` · `PATCH /api/inventory` | Live stock (PATCH is staff+) |
 | `POST /api/orders` · `PATCH /api/orders` | Checkout (atomic stock + order) / cancel |
-| `POST /api/auth/login` · `POST /api/auth/signup` · `POST /api/auth/logout` | Password login / signup / logout |
-| `GET /api/auth/me` · `PATCH /api/auth/me` | Current session / profile |
+| `POST /api/auth/login` · `POST /api/auth/signup` · `POST /api/auth/logout` | JWT login / signup / logout |
+| `POST /api/auth/refresh` | Rotate access JWT from httpOnly refresh cookie |
+| `GET /api/auth/me` · `PATCH /api/auth/me` | Current user from Bearer/access JWT / profile |
 | `GET /api/users` · `POST /api/users` · `PATCH /api/users` | User management (admin / owner) |
 
 Checkout recalculates prices and totals on the server, deducts stock in a transaction, and upserts a customer by email (guest or logged in).

@@ -2,14 +2,14 @@
 
 import Link from "next/link";
 import Image from "next/image";
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { useCartStore, getCouponDiscount } from "@/store/cart";
 import { useBranchStore } from "@/store/branch";
 import { getProductById } from "@/data/products";
 import { getAllLocations, getPriceForLocation } from "@/data/locations";
 import { analyzeCartAvailability } from "@/lib/cart-availability";
 import { useInventoryStore } from "@/store/inventory";
-import { calculateShipping, calculateTax, formatPrice } from "@/lib/utils";
+import { calculateShipping, calculateTax, formatPrice, amountUntilFreeDelivery, formatDeliveryPricingSummary } from "@/lib/utils";
 import { Button } from "@/components/ui/Button";
 import { Input } from "@/components/ui/Input";
 import { Modal } from "@/components/ui/Modal";
@@ -64,10 +64,19 @@ export default function CartPage() {
   const checkoutLines = lines.filter((l) => l.inStock);
   const subtotal = checkoutLines.reduce((n, l) => n + l.lineTotal, 0);
   const discount = getCouponDiscount(coupon, subtotal);
-  const shipping = calculateShipping(subtotal - discount, fulfillment);
-  const tax = calculateTax(subtotal - discount);
+  const shipping = calculateShipping(subtotal - discount, fulfillment, branch);
+  const tax = calculateTax(subtotal - discount, branch);
+  const freeDeliveryGap = amountUntilFreeDelivery(subtotal - discount, branch);
   const total = subtotal - discount + shipping + tax;
   const canCheckout = lines.length > 0 && !availability.hasConflicts;
+
+  useEffect(() => {
+    if (fulfillment === "delivery" && !branch.deliveryAvailable) {
+      setFulfillment("pickup");
+    } else if (fulfillment === "pickup" && !branch.pickupAvailable && branch.deliveryAvailable) {
+      setFulfillment("delivery");
+    }
+  }, [branch.deliveryAvailable, branch.pickupAvailable, fulfillment, setFulfillment]);
 
   return (
     <div className="mx-auto max-w-7xl px-3 py-10 sm:px-4 sm:py-14 md:px-8 md:py-16">
@@ -275,11 +284,15 @@ export default function CartPage() {
 
         <aside className="glass-gold h-fit p-4 sm:p-6">
           <p className="text-[10px] uppercase tracking-[0.22em] text-gold">Summary</p>
-          <p className="mt-2 text-xs text-muted">Branch: {branch.shortName}</p>
+          <p className="mt-2 text-xs text-muted">
+            Branch: {branch.shortName} · {formatDeliveryPricingSummary(branch)}
+          </p>
           <div className="mt-4 flex gap-2">
             <button
+              type="button"
+              disabled={!branch.deliveryAvailable}
               onClick={() => setFulfillment("delivery")}
-              className={`flex-1 py-2 text-xs uppercase tracking-wider ${
+              className={`flex-1 py-2 text-xs uppercase tracking-wider disabled:cursor-not-allowed disabled:opacity-40 ${
                 fulfillment === "delivery"
                   ? "bg-gold text-black"
                   : "border border-white/10 text-muted"
@@ -288,8 +301,10 @@ export default function CartPage() {
               Delivery
             </button>
             <button
+              type="button"
+              disabled={!branch.pickupAvailable}
               onClick={() => setFulfillment("pickup")}
-              className={`flex-1 py-2 text-xs uppercase tracking-wider ${
+              className={`flex-1 py-2 text-xs uppercase tracking-wider disabled:cursor-not-allowed disabled:opacity-40 ${
                 fulfillment === "pickup"
                   ? "bg-gold text-black"
                   : "border border-white/10 text-muted"
@@ -345,6 +360,12 @@ export default function CartPage() {
               <dt className="text-muted">Shipping</dt>
               <dd>{shipping === 0 ? "Free" : formatPrice(shipping)}</dd>
             </div>
+            {fulfillment === "delivery" && branch ? (
+              <p className="text-[10px] leading-relaxed text-muted">
+                {formatDeliveryPricingSummary(branch)}
+                {freeDeliveryGap != null ? ` · Add ${formatPrice(freeDeliveryGap)} for free delivery` : ""}
+              </p>
+            ) : null}
             <div className="flex justify-between">
               <dt className="text-muted">Tax</dt>
               <dd>{formatPrice(tax)}</dd>
