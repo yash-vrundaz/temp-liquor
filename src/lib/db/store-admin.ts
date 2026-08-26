@@ -1,4 +1,5 @@
 import { ensureLocationPricingSchema, mapLocationPricing } from "@/lib/db/location-pricing";
+import { ensureInventoryVisibilityColumn } from "@/lib/db/inventory-visibility";
 import { DEFAULT_FULFILLMENT_PRICING } from "@/lib/fulfillment-pricing";
 import { prisma, isDbConfigured } from "@/lib/db/prisma";
 import { mapEvent, mapLocation } from "@/lib/db/mappers";
@@ -107,6 +108,7 @@ export async function createStoreLocation(actor: UserProfile, input: LocationInp
   }
   if (!isDbConfigured()) return { error: "Database is not configured.", status: 503 as const };
   await ensureLocationPricingSchema();
+  await ensureInventoryVisibilityColumn();
 
   const shortName = input.shortName.trim();
   const name = input.name.trim() || `Sam's Discount Liquor — ${shortName}`;
@@ -199,6 +201,7 @@ export async function updateStoreLocation(
   }
   if (!isDbConfigured()) return { error: "Database is not configured.", status: 503 as const };
   await ensureLocationPricingSchema();
+  await ensureInventoryVisibilityColumn();
   const existing = await prisma.location.findUnique({ where: { id: locationId } });
   if (!existing) return { error: "Location not found.", status: 404 as const };
 
