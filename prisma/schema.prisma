@@ -83,7 +83,11 @@ model Location {
   services         Json
   parking          String
   pickupAvailable  Boolean  @map("pickup_available")
+  deliveryAvailable Boolean @default(true) @map("delivery_available")
   deliveryRadiusKm Float    @map("delivery_radius_km")
+  deliveryFee      Float    @default(12.5) @map("delivery_fee")
+  deliveryFreeMinimum Float @default(150) @map("delivery_free_minimum")
+  taxRate          Float    @default(0.08875) @map("tax_rate")
   featuredOffers   Json     @map("featured_offers")
   description      String   @db.Text
 
@@ -121,6 +125,8 @@ model LocationInventory {
   onHand     Int     @map("on_hand")
   promoPrice Float?  @map("promo_price")
   featured   Boolean @default(false)
+  /** When true, bottle is hidden from the public shop for this branch only. */
+  hidden     Boolean @default(false)
 
   location Location @relation(fields: [locationId], references: [id], onDelete: Cascade)
   product  Product  @relation(fields: [productId], references: [id], onDelete: Cascade)
@@ -280,4 +286,18 @@ model ActivityLog {
   @@index([action])
   @@index([entityType, entityId])
   @@map("activity_logs")
+}
+
+model RoleDefinition {
+  id          String   @id
+  slug        String   @unique
+  label       String
+  description String   @default("") @db.Text
+  permissions Json     @default("[]")
+  rank        Int      @default(1)
+  createdAt   DateTime @default(now()) @map("created_at")
+  updatedAt   DateTime @updatedAt @map("updated_at")
+
+  @@index([rank])
+  @@map("role_definitions")
 }

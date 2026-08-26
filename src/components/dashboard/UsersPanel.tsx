@@ -1,11 +1,14 @@
 "use client";
 
-import { FormEvent, useEffect, useState } from "react";
+import type { FormEvent } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { KeyRound, Pencil, RefreshCw, Search, ShieldCheck, UserPlus, Users } from "lucide-react";
 import { format, formatDistanceToNow } from "date-fns";
-import { apiCreateUser, apiFetchUsers, apiPatchUser } from "@/lib/api-mutations";
+import { apiCreateUser, apiFetchRoles, apiFetchUsers, apiPatchUser } from "@/lib/api-mutations";
+import { setCustomRoleCatalog } from "@/lib/auth/role-catalog";
+import type { CustomRoleDefinition } from "@/lib/auth/role-catalog";
 import {
-  ROLE_LABELS,
+  roleLabel,
   USER_ROLES,
   canAssignRole,
   canDeactivateUser,
@@ -16,8 +19,10 @@ import {
   isDemoAccountEmail,
 } from "@/lib/auth/roles";
 import { isDbConnected } from "@/lib/runtime-data";
+import { isConnectionError } from "@/lib/connection-messages";
+import { ConnectionNotice } from "@/components/dashboard/ConnectionNotice";
 import { useUserStore } from "@/store/user";
-import type { ManagedUser, UserProfile, UserRole } from "@/types";
+import type { ManagedUser, UserProfile } from "@/types";
 import { Input } from "@/components/ui/Input";
 import { Button } from "@/components/ui/Button";
 import { Select } from "@/components/ui/Select";
@@ -27,17 +32,14 @@ import { UserAvatar } from "@/components/ui/UserAvatar";
 import { Modal } from "@/components/ui/Modal";
 import { PasswordInput } from "@/components/ui/PasswordInput";
 import { UserFormModal, type UserFormValues } from "@/components/dashboard/UserFormModal";
-import {
-  RolePermissionsIntro,
-  RolePermissionsMatrix,
-} from "@/components/dashboard/RolePermissionsMatrix";
+import { CustomRolesPanel, roleTone } from "@/components/dashboard/CustomRolesPanel";
 import { cn } from "@/lib/utils";
 
 const ROLE_TONE: Record<string, string> = {
-  owner: "border-(--gold)/40 bg-(--gold)/10 text-gold",
-  admin: "border-violet-400/30 bg-violet-400/10 text-violet-200",
-  staff: "border-sky-400/30 bg-sky-400/10 text-sky-200",
-  customer: "border-white/15 bg-white/5 text-muted",
+  owner: roleTone("owner"),
+  admin: roleTone("admin"),
+  staff: roleTone("staff"),
+  customer: roleTone("customer"),
 };
 
 type UsersView = "directory" | "permissions";
@@ -63,8 +65,15 @@ export function UsersPanel() {
   const [createOpen, setCreateOpen] = useState(false);
   const [editing, setEditing] = useState<ManagedUser | null>(null);
   const [resetting, setResetting] = useState<ManagedUser | null>(null);
+  const [customRoles, setCustomRoles] = useState<CustomRoleDefinition[]>([]);
 
-  const assignableRoles = USER_ROLES.filter((r) => canAssignRole(actor, r));
+  const assignableRoles = useMemo(() => {
+    const builtIn = USER_ROLES.filter((r) => canAssignRole(actor, r));
+    const custom = customRoles
+      .filter((r) => canAssignRole(actor, r.slug))
+      .map((r) => r.slug);
+    return [...builtIn, ...custom];
+  }, [actor, customRoles]);
   const canCreate = hasPermission(actor, "users.create");
   const canAssign = hasPermission(actor, "users.assign_roles");
   const canCustomizePermissions = hasPermission(actor, "users.edit");
@@ -75,7 +84,7 @@ export function UsersPanel() {
       setUsers([]);
       setTotal(0);
       setLoading(false);
-      setError("Connect PostgreSQL to manage users.");
+      setError("");
       return;
     }
     setLoading(true);
@@ -92,11 +101,22 @@ export function UsersPanel() {
       setUsers(data.users);
       setTotal(data.total);
     } catch (err) {
-      setError(err instanceof Error ? err.message : "Could not load users.");
+      const message = err instanceof Error ? err.message : "Could not load users.";
+      setError(isConnectionError(message) ? "" : message);
     } finally {
       setLoading(false);
     }
   };
+
+  useEffect(() => {
+    if (!isDbConnected()) return;
+    void apiFetchRoles()
+      .then((data) => {
+        setCustomRoles(data.roles);
+        setCustomRoleCatalog(data.roles);
+      })
+      .catch(() => {});
+  }, []);
 
   useEffect(() => {
     setPage(1);
@@ -243,11 +263,12 @@ export function UsersPanel() {
         />
       </div>
 
+      {!isDbConnected() ? (
+        <ConnectionNotice className="mt-5" feature="manage team accounts" />
+      ) : null}
+
       {view === "permissions" ? (
-        <div className="mt-5 space-y-4">
-          <RolePermissionsIntro />
-          <RolePermissionsMatrix highlight={actor.role} />
-        </div>
+        <CustomRolesPanel highlight={actor.role} />
       ) : (
         <>
           <div className="mt-5 grid grid-cols-1 items-end gap-3 sm:grid-cols-2 lg:grid-cols-[minmax(0,1fr)_180px_160px]">
@@ -278,7 +299,8 @@ export function UsersPanel() {
               onChange={setRole}
               options={[
                 { value: "all", label: "All roles" },
-                ...USER_ROLES.map((r) => ({ value: r, label: ROLE_LABELS[r] })),
+                ...USER_ROLES.map((r) => ({ value: r, label: roleLabel(r) })),
+                ...customRoles.map((r) => ({ value: r.slug, label: r.label })),
               ]}
             />
             <label>
@@ -302,6 +324,8 @@ export function UsersPanel() {
             <p className="text-xs text-muted">
               {loading
                 ? "Loading…"
+                : !isDbConnected()
+                  ? ""
                 : total === 0
                   ? "No users"
                   : `Showing ${from}–${to} of ${total} user${total === 1 ? "" : "s"}`}
@@ -465,10 +489,10 @@ function RoleBadge({ user }: { user: ManagedUser }) {
     <div className="flex flex-wrap items-center gap-1.5">
       <span
         className={`inline-flex whitespace-nowrap rounded-full border px-2 py-0.5 text-[10px] uppercase tracking-[0.14em] ${
-          ROLE_TONE[user.role] ?? "border-white/15 text-muted"
+          ROLE_TONE[user.role] ?? roleTone(user.role)
         }`}
       >
-        {ROLE_LABELS[user.role]}
+        {roleLabel(user.role)}
       </span>
       {custom ? (
         <span className="inline-flex whitespace-nowrap rounded-full border border-(--gold)/30 bg-(--gold)/10 px-2 py-0.5 text-[10px] uppercase tracking-[0.12em] text-gold">
@@ -515,7 +539,7 @@ function UserActions({
   user: ManagedUser;
   actor: UserProfile;
   actorId: string;
-  assignableRoles: UserRole[];
+  assignableRoles: string[];
   canAssign: boolean;
   onPatch: (input: Parameters<typeof apiPatchUser>[0]) => void;
   onEdit: () => void;
@@ -547,10 +571,10 @@ function UserActions({
       {showRoleSelect && (
         <Select
           value={user.role}
-          onChange={(value) => void onPatch({ userId: user.id, role: value as UserRole })}
+          onChange={(value) => void onPatch({ userId: user.id, role: value })}
           options={assignableRoles.map((r) => ({
             value: r,
-            label: ROLE_LABELS[r],
+            label: roleLabel(r),
           }))}
           className={cn(
             "shrink-0",
@@ -609,7 +633,7 @@ function UserTableRow({
   user: ManagedUser;
   actor: UserProfile;
   actorId: string;
-  assignableRoles: UserRole[];
+  assignableRoles: string[];
   canAssign: boolean;
   onPatch: (input: Parameters<typeof apiPatchUser>[0]) => void;
   onEdit: () => void;
@@ -669,7 +693,7 @@ function UserCard({
   user: ManagedUser;
   actor: UserProfile;
   actorId: string;
-  assignableRoles: UserRole[];
+  assignableRoles: string[];
   canAssign: boolean;
   onPatch: (input: Parameters<typeof apiPatchUser>[0]) => void;
   onEdit: () => void;

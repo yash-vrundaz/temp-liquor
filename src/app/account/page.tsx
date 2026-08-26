@@ -4,7 +4,7 @@ import { FormEvent, useEffect, useState } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useUserStore } from "@/store/user";
-import { ROLE_LABELS, isDemoAccountEmail, isStaffRole } from "@/lib/auth/roles";
+import { roleLabel, isDemoAccountEmail, isStaffRole } from "@/lib/auth/roles";
 import { RolePermissionList } from "@/components/dashboard/RolePermissionsMatrix";
 import { Button } from "@/components/ui/Button";
 import { Input } from "@/components/ui/Input";
@@ -19,6 +19,7 @@ export default function AccountPage() {
   const [name, setName] = useState(profile.name);
   const [email, setEmail] = useState(profile.email);
   const [password, setPassword] = useState("");
+  const [currentPassword, setCurrentPassword] = useState("");
   const [avatarUrl, setAvatarUrl] = useState(profile.avatarUrl ?? "");
   const [message, setMessage] = useState("");
   const [error, setError] = useState("");
@@ -46,15 +47,20 @@ export default function AccountPage() {
     event.preventDefault();
     setError("");
     setMessage("");
+    if (password && !currentPassword) {
+      setError("Enter your current password to set a new one.");
+      return;
+    }
     setBusy(true);
     try {
       await updateProfile({
         name,
         email,
         avatarUrl,
-        ...(password ? { password } : {}),
+        ...(password ? { password, currentPassword } : {}),
       });
       setPassword("");
+      setCurrentPassword("");
       setMessage("Profile saved.");
     } catch (err) {
       setError(err instanceof Error ? err.message : "Could not update profile.");
@@ -68,7 +74,7 @@ export default function AccountPage() {
       <div className="pointer-events-none absolute inset-0 ambient-bg" />
       <div className="relative mx-auto max-w-3xl px-3 py-10 sm:px-4 sm:py-16">
         <p className="text-[10px] uppercase tracking-[0.28em] text-gold">
-          {ROLE_LABELS[profile.role]}
+          {roleLabel(profile.role)}
         </p>
         <h1 className="mt-3 font-display text-3xl text-cream sm:text-4xl">Your account</h1>
         <p className="mt-2 text-sm text-muted">{profile.email}</p>
@@ -85,7 +91,7 @@ export default function AccountPage() {
           </div>
           <div className="glass border border-white/10 p-4">
             <p className="text-[10px] uppercase tracking-wider text-muted">Role</p>
-            <p className="mt-1 text-lg text-cream">{ROLE_LABELS[profile.role]}</p>
+            <p className="mt-1 text-lg text-cream">{roleLabel(profile.role)}</p>
           </div>
         </div>
 
@@ -118,7 +124,17 @@ export default function AccountPage() {
                 disabled={demoLocked}
               />
             </label>
-            <label className="block text-xs text-muted sm:col-span-2">
+            <label className="block text-xs text-muted">
+              Current password
+              <PasswordInput
+                className="mt-1"
+                autoComplete="current-password"
+                value={currentPassword}
+                onChange={(e) => setCurrentPassword(e.target.value)}
+                placeholder={password ? "Required to set a new password" : "Only needed to change password"}
+              />
+            </label>
+            <label className="block text-xs text-muted">
               New password
               <PasswordInput
                 className="mt-1"

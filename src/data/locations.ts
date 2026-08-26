@@ -67,7 +67,11 @@ export const locations: StoreLocation[] = [
     services: ["In-store tasting", "Private cellar", "Same-day delivery", "Gift wrapping"],
     parking: "Valet available on Grand Ave; garage on Mercer St.",
     pickupAvailable: true,
+    deliveryAvailable: true,
     deliveryRadiusKm: 12,
+    deliveryFee: 12.5,
+    deliveryFreeMinimum: 150,
+    taxRate: 0.08875,
     inventory: inventoryForBranch((base, i) => base + (i % 3) - 1),
     featuredOffers: ["10% off Scotch this week", "Complimentary gift wrap over $150"],
     description:
@@ -103,7 +107,11 @@ export const locations: StoreLocation[] = [
     services: ["Harbor pickup", "Event hosting", "Wine club", "Climate cellar"],
     parking: "Free customer parking behind the building.",
     pickupAvailable: true,
+    deliveryAvailable: true,
     deliveryRadiusKm: 8,
+    deliveryFee: 10,
+    deliveryFreeMinimum: 100,
+    taxRate: 0.08875,
     inventory: inventoryForBranch(
       (base, i) => (i === 13 ? 0 : base - (i % 4)),
       (item, i) => ({
@@ -150,7 +158,11 @@ export const locations: StoreLocation[] = [
     services: ["Personal shopping", "Corporate gifting", "Rare allocation list", "Concierge delivery"],
     parking: "Street parking; nearby garage on 72nd.",
     pickupAvailable: true,
+    deliveryAvailable: true,
     deliveryRadiusKm: 15,
+    deliveryFee: 15,
+    deliveryFreeMinimum: 200,
+    taxRate: 0.08875,
     inventory: inventoryForBranch(
       (base, i) => (i === 13 ? 2 : Math.max(1, base + 2 - (i % 2))),
       (item, i) => ({

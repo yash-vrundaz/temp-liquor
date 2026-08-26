@@ -1,8 +1,8 @@
 "use client";
 
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import Image from "next/image";
-import { Package, Pencil, RotateCcw, Search, Trash2 } from "lucide-react";
+import { ChevronDown, Eye, EyeOff, Package, Pencil, RotateCcw, Search, Trash2 } from "lucide-react";
 import { getAllLocations, getLocationById } from "@/data/locations";
 import { getCategories } from "@/data/categories";
 import { getAllProducts, getProductById } from "@/data/products";
@@ -42,6 +42,84 @@ function productImage(product: Product) {
 
 const selectClass =
   "rounded-sm border border-white/10 bg-(--bg-elevated) px-3 py-2.5 text-sm text-cream scheme-dark outline-none focus:border-(--gold)/40 [&_option]:bg-(--bg-elevated)";
+
+const QUICK_ADD_OPTIONS = [5, 10, 15] as const;
+
+function QuickAddSelect({
+  productName,
+  onAdd,
+}: {
+  productName: string;
+  onAdd: (qty: number) => void;
+}) {
+  const [open, setOpen] = useState(false);
+  const [selected, setSelected] = useState<(typeof QUICK_ADD_OPTIONS)[number]>(5);
+  const rootRef = useRef<HTMLDivElement>(null);
+
+  useEffect(() => {
+    if (!open) return;
+    const onPointer = (event: MouseEvent) => {
+      if (!rootRef.current?.contains(event.target as Node)) setOpen(false);
+    };
+    const onKey = (event: KeyboardEvent) => {
+      if (event.key === "Escape") setOpen(false);
+    };
+    document.addEventListener("mousedown", onPointer);
+    document.addEventListener("keydown", onKey);
+    return () => {
+      document.removeEventListener("mousedown", onPointer);
+      document.removeEventListener("keydown", onKey);
+    };
+  }, [open]);
+
+  return (
+    <div ref={rootRef} className="relative inline-flex justify-end">
+      <button
+        type="button"
+        aria-label={`Quick add stock for ${productName}`}
+        aria-haspopup="listbox"
+        aria-expanded={open}
+        onClick={() => setOpen((v) => !v)}
+        className="inline-flex h-9 min-w-[4.75rem] items-center justify-between gap-2 rounded-sm border border-white/15 bg-black/35 px-2.5 text-sm text-gold transition hover:border-(--gold)/40 hover:bg-white/5 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-(--gold)"
+      >
+        <span className="tabular-nums">+{selected}</span>
+        <ChevronDown
+          size={14}
+          className={`shrink-0 text-muted transition ${open ? "rotate-180" : ""}`}
+        />
+      </button>
+      {open ? (
+        <ul
+          role="listbox"
+          className="absolute right-0 top-[calc(100%+4px)] z-[90] min-w-full overflow-hidden rounded-sm border border-white/10 bg-(--bg-elevated) py-1 shadow-[0_12px_40px_rgba(0,0,0,0.55)]"
+        >
+          {QUICK_ADD_OPTIONS.map((qty) => {
+            const active = qty === selected;
+            return (
+              <li key={qty} role="option" aria-selected={active}>
+                <button
+                  type="button"
+                  onClick={() => {
+                    setSelected(qty);
+                    setOpen(false);
+                    onAdd(qty);
+                  }}
+                  className={`flex w-full items-center justify-center px-3 py-2 text-sm tabular-nums transition ${
+                    active
+                      ? "bg-(--gold)/15 text-gold"
+                      : "text-cream hover:bg-white/10"
+                  }`}
+                >
+                  +{qty}
+                </button>
+              </li>
+            );
+          })}
+        </ul>
+      ) : null}
+    </div>
+  );
+}
 
 function StatusPill({ status }: { status: ReturnType<typeof stockStatus> }) {
   const label =
@@ -132,6 +210,9 @@ export function InventoryPanel({
   const setOnHand = useInventoryStore((s) => s.setOnHand);
   const adjust = useInventoryStore((s) => s.adjust);
   const resetToCatalog = useInventoryStore((s) => s.resetToCatalog);
+  const isHidden = useInventoryStore((s) => s.isHidden);
+  const setHidden = useInventoryStore((s) => s.setHidden);
+  const inventoryRevision = useInventoryStore((s) => s.revision);
   const catalogRevision = useCatalogStore((s) => s.revision);
   const removeBottle = useCatalogStore((s) => s.removeBottle);
   const custom = useCatalogStore((s) => s.custom);
@@ -171,6 +252,7 @@ export function InventoryPanel({
       onHand: number;
       seed: number;
       status: ReturnType<typeof stockStatus>;
+      hidden: boolean;
     }[] = [];
 
     for (const product of catalog) {
@@ -191,7 +273,13 @@ export function InventoryPanel({
       ) {
         continue;
       }
-      list.push({ product, onHand, seed, status });
+      list.push({
+        product,
+        onHand,
+        seed,
+        status,
+        hidden: isHidden(storeId, product.id),
+      });
     }
 
     const rank = { out: 0, low: 1, ok: 2 };
@@ -200,7 +288,7 @@ export function InventoryPanel({
       if (sortKey === "stock") return compareValues(a.onHand, b.onHand, sortDir);
       return compareValues(a.product.name, b.product.name, sortDir);
     });
-  }, [storeId, stocks, query, stockFilter, category, sortKey, sortDir, catalogRevision]);
+  }, [storeId, stocks, query, stockFilter, category, sortKey, sortDir, catalogRevision, inventoryRevision, isHidden]);
 
   const totalPages = Math.max(1, Math.ceil(rows.length / pageSize));
   const safePage = Math.min(page, totalPages);
@@ -332,51 +420,7 @@ export function InventoryPanel({
 
       {!showCategories ? (
         <>
-      {/* Store picker — select on mobile, tabs on sm+ */}
-      <div className="mt-5 sm:hidden">
-        <label className="block text-xs text-muted">
-          Store
-          <select
-            value={storeId}
-            onChange={(e) => selectStore(e.target.value)}
-            className={`${selectClass} mt-1 w-full min-h-11`}
-            aria-label="Store inventory"
-          >
-            {stores.map((loc) => (
-              <option key={loc.id} value={loc.id}>
-                {loc.shortName} · {loc.city}
-              </option>
-            ))}
-          </select>
-        </label>
-      </div>
-      <div
-        className="mt-5 -mx-3 hidden h-scroll border-b border-white/10 px-3 sm:mx-0 sm:flex sm:px-0"
-        role="tablist"
-        aria-label="Store inventory"
-      >
-        {stores.map((loc) => {
-          const active = storeId === loc.id;
-          return (
-            <button
-              key={loc.id}
-              type="button"
-              role="tab"
-              aria-selected={active}
-              onClick={() => selectStore(loc.id)}
-              className={`border-b-2 px-3 py-3 text-sm uppercase tracking-[0.14em] transition-colors sm:px-4 ${
-                active
-                  ? "border-(--gold) text-cream"
-                  : "border-transparent text-muted hover:text-cream"
-              }`}
-            >
-              {loc.shortName}
-            </button>
-          );
-        })}
-      </div>
-
-      <div className="mt-4 flex flex-col gap-3 sm:flex-row sm:items-end sm:justify-between">
+      <div className="mt-5 flex flex-col gap-3 sm:flex-row sm:items-end sm:justify-between">
         <div className="min-w-0">
           <p className="font-display text-lg text-cream sm:text-xl">
             {activeLocation.name}
@@ -411,47 +455,71 @@ export function InventoryPanel({
         </dl>
       </div>
 
-      {/* Filters — one row */}
-      <div className="mt-5 grid gap-2 sm:grid-cols-2 lg:grid-cols-3">
-        <div className="relative sm:col-span-2 lg:col-span-1">
-          <Search
-            size={14}
-            className="pointer-events-none absolute top-1/2 left-3 -translate-y-1/2 text-muted"
-          />
-          <Input
-            className="py-2.5 pl-9"
-            placeholder="Search…"
-            value={query}
-            onChange={(e) => setQuery(e.target.value)}
-            aria-label="Search inventory"
-          />
-        </div>
-        <select
-          className={selectClass}
-          value={category}
-          onChange={(e) =>
-            setCategory(e.target.value as CategorySlug | "all")
-          }
-          aria-label="Category"
-        >
-          <option value="all">All categories</option>
-          {getCategories().map((c) => (
-            <option key={c.slug} value={c.slug}>
-              {c.name}
-            </option>
-          ))}
-        </select>
-        <select
-          className={selectClass}
-          value={stockFilter}
-          onChange={(e) => setStockFilter(e.target.value as StockFilter)}
-          aria-label="Stock status"
-        >
-          <option value="all">Any status</option>
-          <option value="ok">In stock</option>
-          <option value="low">Low stock</option>
-          <option value="out">Out of stock</option>
-        </select>
+      {/* Filters — search + category + stock + store */}
+      <div className="mt-5 grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
+        <label className="block text-xs text-muted sm:col-span-2 lg:col-span-1">
+          Search
+          <div className="relative mt-1">
+            <Search
+              size={14}
+              className="pointer-events-none absolute top-1/2 left-3 -translate-y-1/2 text-muted"
+            />
+            <Input
+              className="py-2.5 pl-9"
+              placeholder="Search…"
+              value={query}
+              onChange={(e) => setQuery(e.target.value)}
+              aria-label="Search inventory"
+            />
+          </div>
+        </label>
+        <label className="block text-xs text-muted">
+          Category
+          <select
+            className={`${selectClass} mt-1 w-full`}
+            value={category}
+            onChange={(e) =>
+              setCategory(e.target.value as CategorySlug | "all")
+            }
+            aria-label="Category"
+          >
+            <option value="all">All categories</option>
+            {getCategories().map((c) => (
+              <option key={c.slug} value={c.slug}>
+                {c.name}
+              </option>
+            ))}
+          </select>
+        </label>
+        <label className="block text-xs text-muted">
+          Status
+          <select
+            className={`${selectClass} mt-1 w-full`}
+            value={stockFilter}
+            onChange={(e) => setStockFilter(e.target.value as StockFilter)}
+            aria-label="Stock status"
+          >
+            <option value="all">Any status</option>
+            <option value="ok">In stock</option>
+            <option value="low">Low stock</option>
+            <option value="out">Out of stock</option>
+          </select>
+        </label>
+        <label className="block text-xs text-muted">
+          Store
+          <select
+            className={`${selectClass} mt-1 w-full`}
+            value={storeId}
+            onChange={(e) => selectStore(e.target.value)}
+            aria-label="Store inventory"
+          >
+            {stores.map((loc) => (
+              <option key={loc.id} value={loc.id}>
+                {loc.shortName} · {loc.city}
+              </option>
+            ))}
+          </select>
+        </label>
       </div>
 
       <div className="mt-3 flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
@@ -507,18 +575,19 @@ export function InventoryPanel({
                 sortDir={sortDir}
                 onSort={toggleSort}
               />
-              <th className="px-4 py-3 text-right font-medium">Quick</th>
+              <th className="px-4 py-3 text-right font-medium">Quick add</th>
+              <th className="px-4 py-3 text-right font-medium">Action</th>
             </tr>
           </thead>
           <tbody>
             {pageRows.length === 0 ? (
               <tr>
-                <td colSpan={4} className="px-4 py-12 text-center text-muted">
+                <td colSpan={5} className="px-4 py-12 text-center text-muted">
                   No bottles match these filters.
                 </td>
               </tr>
             ) : (
-              pageRows.map(({ product, onHand, status }) => {
+              pageRows.map(({ product, onHand, status, hidden }) => {
                 const img = productImage(product);
                 return (
                   <tr key={product.id} className={tableRowClass}>
@@ -537,7 +606,14 @@ export function InventoryPanel({
                           ) : null}
                         </div>
                         <div className="min-w-0">
-                          <p className="truncate font-medium text-cream">{product.name}</p>
+                          <p className="truncate font-medium text-cream">
+                            {product.name}
+                            {hidden ? (
+                              <span className="ml-2 text-[10px] uppercase tracking-wider text-muted">
+                                Hidden
+                              </span>
+                            ) : null}
+                          </p>
                           <p className="truncate text-[11px] text-muted">
                             {product.brand} · {product.category} · $
                             {product.price.toFixed(0)}
@@ -565,29 +641,44 @@ export function InventoryPanel({
                       />
                     </td>
                     <td className={`${tableCellClass} text-right`}>
+                      {canRestock ? (
+                        <QuickAddSelect
+                          productName={product.name}
+                          onAdd={(qty) => adjust(storeId, product.id, qty, "restock")}
+                        />
+                      ) : (
+                        <span className="text-[11px] text-muted">—</span>
+                      )}
+                    </td>
+                    <td className={`${tableCellClass} text-right`}>
                       <div className="inline-flex flex-nowrap items-center justify-end gap-1">
+                        {canAdjust ? (
+                          <Button
+                            size="sm"
+                            variant="ghost"
+                            className="h-9 px-2.5"
+                            onClick={() => setHidden(storeId, product.id, !hidden)}
+                            title={
+                              hidden
+                                ? "Show this bottle on the website for this store"
+                                : "Hide this bottle from the website for this store"
+                            }
+                          >
+                            {hidden ? <Eye size={13} /> : <EyeOff size={13} />}
+                            {hidden ? "Show" : "Hide"}
+                          </Button>
+                        ) : null}
                         {canEditBottle ? (
                           <Button
                             size="sm"
                             variant="ghost"
-                            className="h-8 px-2.5"
+                            className="h-9 px-2.5"
                             onClick={() => setEditor(product)}
                           >
                             <Pencil size={13} />
                             Edit
                           </Button>
-                        ) : null}
-                        {canRestock ? (
-                          <button
-                            type="button"
-                            className="px-2 py-1 text-[11px] uppercase tracking-wider text-muted hover:text-cream"
-                            onClick={() =>
-                              adjust(storeId, product.id, 12, "restock")
-                            }
-                          >
-                            +12
-                          </button>
-                        ) : !canEditBottle ? (
+                        ) : !canAdjust ? (
                           <span className="text-[11px] text-muted">View only</span>
                         ) : null}
                       </div>
@@ -607,7 +698,7 @@ export function InventoryPanel({
             No bottles match these filters.
           </li>
         ) : (
-          pageRows.map(({ product, onHand, status }) => {
+          pageRows.map(({ product, onHand, status, hidden }) => {
             const img = productImage(product);
             return (
               <li key={product.id} className="py-4">
@@ -627,7 +718,14 @@ export function InventoryPanel({
                   <div className="min-w-0 flex-1">
                     <div className="flex items-start justify-between gap-2">
                       <div className="min-w-0">
-                        <p className="truncate text-cream">{product.name}</p>
+                        <p className="truncate text-cream">
+                          {product.name}
+                          {hidden ? (
+                            <span className="ml-2 text-[10px] uppercase tracking-wider text-muted">
+                              Hidden
+                            </span>
+                          ) : null}
+                        </p>
                         <p className="text-[11px] text-muted">{product.brand}</p>
                       </div>
                       <StatusPill status={status} />
@@ -647,17 +745,22 @@ export function InventoryPanel({
                           )
                         }
                       />
-                      {canRestock && (
+                      {canRestock ? (
+                        <QuickAddSelect
+                          productName={product.name}
+                          onAdd={(qty) => adjust(storeId, product.id, qty, "restock")}
+                        />
+                      ) : null}
+                      {canAdjust ? (
                         <button
                           type="button"
-                          className="inline-flex min-h-10 items-center px-3 text-[11px] uppercase tracking-wider text-muted"
-                          onClick={() =>
-                            adjust(storeId, product.id, 12, "restock")
-                          }
+                          className="inline-flex min-h-10 items-center gap-1 px-3 text-[11px] uppercase tracking-wider text-muted hover:text-cream"
+                          onClick={() => setHidden(storeId, product.id, !hidden)}
                         >
-                          +12
+                          {hidden ? <Eye size={12} /> : <EyeOff size={12} />}
+                          {hidden ? "Show" : "Hide"}
                         </button>
-                      )}
+                      ) : null}
                       {canEditBottle ? (
                         <button
                           type="button"
@@ -704,7 +807,7 @@ export function InventoryPanel({
                   <button
                     type="button"
                     className="inline-flex shrink-0 items-center gap-1 text-[11px] uppercase tracking-wider text-muted hover:text-red-300"
-                    onClick={() => removeBottle(p.id)}
+                    onClick={() => void removeBottle(p.id)}
                   >
                     <Trash2 size={12} />
                     Remove

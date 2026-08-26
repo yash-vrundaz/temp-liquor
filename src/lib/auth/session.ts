@@ -1,83 +1,274 @@
 import { SignJWT, jwtVerify } from "jose";
-import { cookies } from "next/headers";
+import { cookies, headers } from "next/headers";
 import { NextResponse } from "next/server";
-import type { UserRole } from "@/types";
 
-export const SESSION_COOKIE = "sams_session";
-const SESSION_DAYS = 7;
+/** Short-lived access JWT (Bearer + httpOnly cookie). */
+export const ACCESS_COOKIE = "sams_access";
+/** Long-lived refresh JWT (httpOnly; used only to mint new access tokens). */
+export const REFRESH_COOKIE = "sams_refresh";
+/** Legacy single-session cookie — cleared on logout / login. */
+export const LEGACY_SESSION_COOKIE = "sams_session";
 
-export type SessionPayload = {
+export const ACCESS_TTL_SECONDS = 15 * 60;
+export const REFRESH_TTL_SECONDS = 7 * 24 * 60 * 60;
+
+export type AuthClaims = {
   sub: string;
   email: string;
-  role: UserRole;
+  role: string;
+};
+
+export type AccessTokenClaims = AuthClaims & { typ: "access"; jti: string };
+export type RefreshTokenClaims = AuthClaims & { typ: "refresh"; jti: string };
+
+export type IssuedTokens = {
+  accessToken: string;
+  refreshToken: string;
+  tokenType: "Bearer";
+  expiresIn: number;
 };
 
 function secretKey() {
-  const secret =
-    process.env.AUTH_SECRET ||
-    (process.env.NODE_ENV === "production" ? "" : "liquor-shop-dev-auth-secret-2026");
-  if (!secret) {
-    throw new Error("AUTH_SECRET is not set.");
+  const fallback = "liquor-shop-dev-auth-secret-2026";
+  const secret = process.env.AUTH_SECRET || "";
+  if (process.env.NODE_ENV === "production") {
+    if (!secret || secret === fallback || secret.length < 32) {
+      throw new Error("AUTH_SECRET must be a unique 32+ character value in production.");
+    }
+    return new TextEncoder().encode(secret);
   }
-  return new TextEncoder().encode(secret);
+  return new TextEncoder().encode(secret || fallback);
 }
 
-function cookieBase() {
+function cookieBase(path = "/") {
   return {
     httpOnly: true,
     sameSite: "lax" as const,
     secure: process.env.NODE_ENV === "production",
-    path: "/",
+    path,
   };
 }
 
-export async function signSession(payload: SessionPayload) {
-  return new SignJWT({ email: payload.email, role: payload.role })
-    .setProtectedHeader({ alg: "HS256" })
-    .setSubject(payload.sub)
+function isRole(value: unknown): value is string {
+  return typeof value === "string" && value.trim().length > 0;
+}
+
+/** Shared across Next.js route bundles (module maps are not always singletons). */
+const globalRevoked = globalThis as typeof globalThis & {
+  __samsRevokedAccess?: Map<string, number>;
+};
+function revokedAccess() {
+  if (!globalRevoked.__samsRevokedAccess) {
+    globalRevoked.__samsRevokedAccess = new Map();
+  }
+  return globalRevoked.__samsRevokedAccess;
+}
+
+function pruneRevoked(now = Date.now()) {
+  for (const [jti, exp] of revokedAccess()) {
+    if (exp <= now) revokedAccess().delete(jti);
+  }
+}
+
+export function revokeAccessToken(jti: string, expiresAtMs: number) {
+  const map = revokedAccess();
+  if (map.size > 5_000) pruneRevoked();
+  map.set(jti, expiresAtMs);
+}
+
+export function isAccessTokenRevoked(jti: string) {
+  const map = revokedAccess();
+  const exp = map.get(jti);
+  if (!exp) return false;
+  if (Date.now() >= exp) {
+    map.delete(jti);
+    return false;
+  }
+  return true;
+}
+
+export async function signAccessToken(claims: AuthClaims) {
+  const jti = crypto.randomUUID();
+  return new SignJWT({
+    email: claims.email,
+    role: claims.role,
+    typ: "access",
+    jti,
+  })
+    .setProtectedHeader({ alg: "HS256", typ: "JWT" })
+    .setSubject(claims.sub)
+    .setJti(jti)
     .setIssuedAt()
-    .setExpirationTime(`${SESSION_DAYS}d`)
+    .setExpirationTime(`${ACCESS_TTL_SECONDS}s`)
     .sign(secretKey());
 }
 
-export async function readSessionToken(token: string): Promise<SessionPayload | null> {
+export async function signRefreshToken(claims: AuthClaims) {
+  const jti = crypto.randomUUID();
+  return new SignJWT({
+    email: claims.email,
+    role: claims.role,
+    typ: "refresh",
+    jti,
+  })
+    .setProtectedHeader({ alg: "HS256", typ: "JWT" })
+    .setSubject(claims.sub)
+    .setJti(jti)
+    .setIssuedAt()
+    .setExpirationTime(`${REFRESH_TTL_SECONDS}s`)
+    .sign(secretKey());
+}
+
+export async function issueTokens(claims: AuthClaims): Promise<IssuedTokens> {
+  const [accessToken, refreshToken] = await Promise.all([
+    signAccessToken(claims),
+    signRefreshToken(claims),
+  ]);
+  return {
+    accessToken,
+    refreshToken,
+    tokenType: "Bearer",
+    expiresIn: ACCESS_TTL_SECONDS,
+  };
+}
+
+export async function verifyAccessToken(token: string): Promise<AccessTokenClaims | null> {
   try {
     const { payload } = await jwtVerify(token, secretKey());
-    if (!payload.sub || typeof payload.email !== "string" || typeof payload.role !== "string") {
+    if (!payload.sub || typeof payload.email !== "string" || !isRole(payload.role)) {
       return null;
     }
+    // Accept legacy cookies that were JWTs without typ (migrated away from "session").
+    if (payload.typ && payload.typ !== "access") return null;
+    const jti = typeof payload.jti === "string" ? payload.jti : null;
+    if (!jti) {
+      // Legacy tokens without jti: allow until natural expiry, then disappear.
+      return {
+        sub: payload.sub,
+        email: payload.email,
+        role: payload.role,
+        typ: "access",
+        jti: "legacy",
+      };
+    }
+    if (isAccessTokenRevoked(jti)) return null;
     return {
       sub: payload.sub,
       email: payload.email,
-      role: payload.role as UserRole,
+      role: payload.role,
+      typ: "access",
+      jti,
     };
   } catch {
     return null;
   }
 }
 
-export async function getSession(): Promise<SessionPayload | null> {
+export async function verifyRefreshToken(token: string): Promise<RefreshTokenClaims | null> {
+  try {
+    const { payload } = await jwtVerify(token, secretKey());
+    if (
+      !payload.sub ||
+      typeof payload.email !== "string" ||
+      !isRole(payload.role) ||
+      payload.typ !== "refresh"
+    ) {
+      return null;
+    }
+    const jti = typeof payload.jti === "string" ? payload.jti : null;
+    if (!jti) return null;
+    return {
+      sub: payload.sub,
+      email: payload.email,
+      role: payload.role,
+      typ: "refresh",
+      jti,
+    };
+  } catch {
+    return null;
+  }
+}
+
+/** Prefer Authorization: Bearer, then access cookie, then legacy session cookie. */
+export async function readAccessTokenFromRequest(): Promise<string | null> {
+  const h = await headers();
+  const auth = h.get("authorization");
+  if (auth?.toLowerCase().startsWith("bearer ")) {
+    const token = auth.slice(7).trim();
+    if (token) return token;
+  }
   const jar = await cookies();
-  const token = jar.get(SESSION_COOKIE)?.value;
+  return jar.get(ACCESS_COOKIE)?.value || jar.get(LEGACY_SESSION_COOKIE)?.value || null;
+}
+
+export async function readRefreshTokenFromRequest(): Promise<string | null> {
+  const jar = await cookies();
+  return jar.get(REFRESH_COOKIE)?.value || null;
+}
+
+export async function getAuthClaims(): Promise<AccessTokenClaims | null> {
+  const token = await readAccessTokenFromRequest();
   if (!token) return null;
-  return readSessionToken(token);
+  return verifyAccessToken(token);
 }
 
-export async function writeSessionCookie(res: NextResponse, payload: SessionPayload) {
-  const token = await signSession(payload);
-  res.cookies.set(SESSION_COOKIE, token, {
+export function applyAuthCookies(res: NextResponse, tokens: IssuedTokens) {
+  res.cookies.set(ACCESS_COOKIE, tokens.accessToken, {
     ...cookieBase(),
-    maxAge: SESSION_DAYS * 24 * 60 * 60,
+    maxAge: ACCESS_TTL_SECONDS,
   });
-  return res;
-}
-
-export function expireSessionCookie(res: NextResponse) {
-  res.cookies.set(SESSION_COOKIE, "", {
+  res.cookies.set(REFRESH_COOKIE, tokens.refreshToken, {
+    ...cookieBase("/"),
+    maxAge: REFRESH_TTL_SECONDS,
+  });
+  // Drop legacy opaque-looking session cookie name.
+  res.cookies.set(LEGACY_SESSION_COOKIE, "", {
     ...cookieBase(),
     maxAge: 0,
     expires: new Date(0),
   });
-  res.cookies.delete(SESSION_COOKIE);
+  res.cookies.delete(LEGACY_SESSION_COOKIE);
   return res;
+}
+
+export function clearAuthCookies(res: NextResponse) {
+  const expired = { maxAge: 0, expires: new Date(0) };
+  res.cookies.set(ACCESS_COOKIE, "", { ...cookieBase(), ...expired });
+  res.cookies.set(REFRESH_COOKIE, "", { ...cookieBase("/"), ...expired });
+  res.cookies.set(LEGACY_SESSION_COOKIE, "", { ...cookieBase(), ...expired });
+  res.cookies.delete(ACCESS_COOKIE);
+  res.cookies.delete(REFRESH_COOKIE);
+  res.cookies.delete(LEGACY_SESSION_COOKIE);
+  return res;
+}
+
+export async function attachAuth(
+  res: NextResponse,
+  claims: AuthClaims,
+): Promise<{ response: NextResponse; tokens: IssuedTokens }> {
+  const tokens = await issueTokens(claims);
+  return { response: applyAuthCookies(res, tokens), tokens };
+}
+
+// ── Backward-compatible aliases (call sites migrating off "session" naming) ──
+
+/** @deprecated Use ACCESS_COOKIE / REFRESH_COOKIE */
+export const SESSION_COOKIE = ACCESS_COOKIE;
+/** @deprecated Use AuthClaims */
+export type SessionPayload = AuthClaims;
+
+/** @deprecated Use getAuthClaims */
+export async function getSession() {
+  return getAuthClaims();
+}
+
+/** @deprecated Use attachAuth */
+export async function writeSessionCookie(res: NextResponse, payload: AuthClaims) {
+  const { response } = await attachAuth(res, payload);
+  return response;
+}
+
+/** @deprecated Use clearAuthCookies */
+export function expireSessionCookie(res: NextResponse) {
+  return clearAuthCookies(res);
 }

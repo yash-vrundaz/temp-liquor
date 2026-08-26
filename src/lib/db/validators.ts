@@ -19,7 +19,18 @@ export const categoryPatchSchema = z.object({
   patch: categoryWriteSchema.partial(),
 });
 
-const mediaUrlSchema = z.string().trim().max(4000);
+const mediaUrlSchema = z
+  .string()
+  .trim()
+  .max(4000)
+  .refine(
+    (value) =>
+      value === "" ||
+      value.startsWith("/") ||
+      value.startsWith("https://") ||
+      value.startsWith("http://"),
+    "Use a site path or http(s) URL.",
+  );
 
 export const bottleFieldsSchema = z.object({
   name: z.string().trim().min(1).max(120),
@@ -77,15 +88,26 @@ const avatarUrlSchema = z.string().max(900_000);
 
 export const mePatchSchema = z.union([
   z.object({
-    patch: z.object({
-      name: z.string().trim().min(2).max(120).optional(),
-      email: z.string().email().optional(),
-      avatarUrl: avatarUrlSchema.nullable().optional(),
-      preferredBranchId: z.string().min(1).optional(),
-      recentlyViewed: z.array(z.string()).max(12).optional(),
-      addresses: z.array(addressSchema).optional(),
-      password: z.string().min(8).max(200).optional(),
-    }),
+    patch: z
+      .object({
+        name: z.string().trim().min(2).max(120).optional(),
+        email: z.string().email().optional(),
+        avatarUrl: avatarUrlSchema.nullable().optional(),
+        preferredBranchId: z.string().min(1).optional(),
+        recentlyViewed: z.array(z.string()).max(12).optional(),
+        addresses: z.array(addressSchema).optional(),
+        password: z.string().min(8).max(200).optional(),
+        currentPassword: z.string().min(1).max(200).optional(),
+      })
+      .superRefine((patch, ctx) => {
+        if (patch.password && !patch.currentPassword) {
+          ctx.addIssue({
+            code: z.ZodIssueCode.custom,
+            message: "Enter your current password to change it.",
+            path: ["currentPassword"],
+          });
+        }
+      }),
   }),
   z.object({
     redeemPoints: z.number().int().positive(),
@@ -125,7 +147,7 @@ export const createUserSchema = z.object({
   name: z.string().trim().min(2).max(120),
   email: z.string().email(),
   password: z.string().min(8).max(200),
-  role: z.enum(["customer", "staff", "admin", "owner"]),
+  role: z.string().trim().min(1).max(40),
   preferredBranchId: z.string().min(1).optional(),
   avatarUrl: avatarUrlSchema.optional(),
   permissionGrants: permissionListSchema.optional(),
@@ -137,7 +159,7 @@ export const patchUserSchema = z.object({
   userId: z.string().min(1),
   name: z.string().trim().min(2).max(120).optional(),
   email: z.string().email().optional(),
-  role: z.enum(["customer", "staff", "admin", "owner"]).optional(),
+  role: z.string().trim().min(1).max(40).optional(),
   active: z.boolean().optional(),
   password: z.string().min(8).max(200).optional(),
   avatarUrl: avatarUrlSchema.nullable().optional(),
@@ -193,6 +215,9 @@ export const placeOrderSchema = z
     locationId: z.string().min(1),
     fulfillment: z.enum(["delivery", "pickup"]),
     coupon: z.string().nullable().optional(),
+    ageConfirmed: z.literal(true, {
+      error: "Confirm you are 21 or older to place this order.",
+    }),
     delivery: deliveryAddressSchema.optional(),
     items: z
       .array(
@@ -262,6 +287,13 @@ export const inventoryPatchSchema = z.discriminatedUnion("action", [
     locationId: z.string().min(1).optional(),
     actorUserId: z.string().min(1).optional(),
   }),
+  z.object({
+    action: z.literal("visibility"),
+    locationId: z.string().min(1),
+    productId: z.string().min(1),
+    hidden: z.boolean(),
+    actorUserId: z.string().min(1).optional(),
+  }),
 ]);
 
 export const locationWriteSchema = z.object({
@@ -275,7 +307,11 @@ export const locationWriteSchema = z.object({
   email: z.string().email(),
   description: z.string().trim().max(4000).optional(),
   pickupAvailable: z.boolean().optional(),
+  deliveryAvailable: z.boolean().optional(),
   deliveryRadiusKm: z.number().min(0).max(200).optional(),
+  deliveryFee: z.number().min(0).max(500).optional(),
+  deliveryFreeMinimum: z.number().min(0).max(10000).optional(),
+  taxRate: z.number().min(0).max(0.25).optional(),
   parking: z.string().trim().max(400).optional(),
   heroImage: z.string().trim().max(4000).optional(),
   gallery: z.array(z.string().trim().max(4000)).max(8).optional(),
@@ -286,6 +322,22 @@ export const locationWriteSchema = z.object({
 export const locationPatchSchema = z.object({
   locationId: z.string().min(1),
   patch: locationWriteSchema.partial(),
+});
+
+export const driverWriteSchema = z.object({
+  name: z.string().trim().min(2).max(80),
+  phone: z.string().trim().min(7).max(40),
+  email: z.string().email().optional().or(z.literal("")),
+  vehicle: z.string().trim().min(2).max(120),
+  locationId: z.string().min(1),
+  photoUrl: z.string().trim().max(4000).optional(),
+  status: z.enum(["available", "on_route", "offline"]).optional(),
+  active: z.boolean().optional(),
+});
+
+export const driverPatchSchema = z.object({
+  driverId: z.string().min(1),
+  patch: driverWriteSchema.partial(),
 });
 
 const eventFieldsSchema = z.object({
@@ -321,4 +373,24 @@ export const eventWriteSchema = eventFieldsSchema.superRefine(refineEventTimes);
 export const eventPatchSchema = z.object({
   eventId: z.string().min(1),
   patch: eventFieldsSchema.partial().superRefine(refineEventTimes),
+});
+
+export const roleWriteSchema = z.object({
+  label: z.string().trim().min(2).max(80),
+  description: z.string().trim().max(400).optional().default(""),
+  slug: z
+    .string()
+    .trim()
+    .max(40)
+    .regex(/^[a-z][a-z0-9-]*$/, "Use a lowercase slug like inventory-lead.")
+    .optional(),
+  rank: z.number().int().min(0).max(2).optional(),
+  permissions: permissionListSchema.min(1, "Choose at least one permission."),
+});
+
+export const rolePatchSchema = z.object({
+  roleId: z.string().min(1),
+  patch: roleWriteSchema.partial().extend({
+    permissions: permissionListSchema.min(1).optional(),
+  }),
 });

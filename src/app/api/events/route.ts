@@ -3,6 +3,7 @@ import { bookEventSeats, fetchEventBySlug, fetchEvents, fetchInventoryState } fr
 import { bookSeatsSchema, eventPatchSchema, eventWriteSchema } from "@/lib/db/validators";
 import { getRequestUser, requirePermission } from "@/lib/auth/require";
 import { createStoreEvent, deleteStoreEvent, updateStoreEvent } from "@/lib/db/store-admin";
+import { clientIp, rateLimit, tooManyRequests } from "@/lib/rate-limit";
 
 export async function GET(request: Request) {
   try {
@@ -25,6 +26,10 @@ export async function GET(request: Request) {
 
 export async function POST(request: Request) {
   try {
+    const limited = rateLimit(`events-book:${clientIp(request)}`, { limit: 8, windowMs: 60_000 });
+    if (!limited.ok) {
+      return tooManyRequests(limited.retryAfter, "Too many booking attempts. Try again shortly.");
+    }
     const parsed = bookSeatsSchema.safeParse(await request.json());
     if (!parsed.success) {
       return NextResponse.json({ error: "Invalid booking payload." }, { status: 400 });

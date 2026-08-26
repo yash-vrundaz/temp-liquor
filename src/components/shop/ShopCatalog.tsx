@@ -7,6 +7,8 @@ import { getAllProducts } from "@/data/products";
 import { getCategories } from "@/data/categories";
 import { searchProducts } from "@/lib/search";
 import { useCatalogStore } from "@/store/catalog";
+import { useBranchStore } from "@/store/branch";
+import { useInventoryStore } from "@/store/inventory";
 import { ProductCard } from "@/components/product/ProductCard";
 import { SectionHeading } from "@/components/ui/SectionHeading";
 import { Pagination } from "@/components/ui/Pagination";
@@ -18,13 +20,16 @@ export function ShopCatalog() {
   const [pageSize, setPageSize] = useState(8);
   const [search, setSearch] = useState("");
   const catalogRevision = useCatalogStore((s) => s.revision);
+  const branchId = useBranchStore((s) => s.branchId);
+  const isHidden = useInventoryStore((s) => s.isHidden);
+  const inventoryRevision = useInventoryStore((s) => s.revision);
 
   const filtered = useMemo(() => {
-    const all = getAllProducts();
+    const all = getAllProducts().filter((p) => !isHidden(branchId, p.id));
     const q = search.trim();
     if (!q) return all;
-    return searchProducts(q, 0);
-  }, [search, catalogRevision]);
+    return searchProducts(q, 0).filter((p) => !isHidden(branchId, p.id));
+  }, [search, catalogRevision, branchId, isHidden, inventoryRevision]);
 
   const totalPages = Math.max(1, Math.ceil(filtered.length / pageSize));
 

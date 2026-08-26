@@ -8,6 +8,7 @@ import type {
   StoreLocation,
   UserProfile,
 } from "@/types";
+import { mapLocationPricing } from "@/lib/db/location-pricing";
 import type {
   Category as DbCategory,
   Event as DbEvent,
@@ -80,6 +81,7 @@ export function mapInventoryItem(row: DbInventory): InventoryItem {
     stock: row.seedStock,
     promoPrice: row.promoPrice ?? undefined,
     featured: row.featured,
+    hidden: Boolean((row as { hidden?: boolean }).hidden),
   };
 }
 
@@ -104,6 +106,7 @@ export function mapLocation(row: DbLocationRow): StoreLocation {
     services: asStringArray(row.services),
     parking: row.parking,
     pickupAvailable: row.pickupAvailable,
+    ...mapLocationPricing(row),
     deliveryRadiusKm: row.deliveryRadiusKm,
     inventory: row.inventory.map(mapInventoryItem),
     featuredOffers: asStringArray(row.featuredOffers),

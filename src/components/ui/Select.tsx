@@ -11,6 +11,7 @@ export type SelectOption = {
 
 type Props = {
   label?: string;
+  ariaLabel?: string;
   value: string;
   onChange: (value: string) => void;
   options: SelectOption[];
@@ -18,7 +19,7 @@ type Props = {
   id?: string;
 };
 
-export function Select({ label, value, onChange, options, className, id }: Props) {
+export function Select({ label, ariaLabel, value, onChange, options, className, id }: Props) {
   const [open, setOpen] = useState(false);
   const rootRef = useRef<HTMLDivElement>(null);
   const autoId = useId();
@@ -53,6 +54,7 @@ export function Select({ label, value, onChange, options, className, id }: Props
         aria-haspopup="listbox"
         aria-expanded={open}
         aria-labelledby={label ? `${listId}-label` : undefined}
+        aria-label={!label ? ariaLabel : undefined}
         aria-controls={listId}
         onClick={() => setOpen((v) => !v)}
         className={cn(
@@ -73,7 +75,7 @@ export function Select({ label, value, onChange, options, className, id }: Props
         <ul
           id={listId}
           role="listbox"
-          aria-label={label}
+          aria-label={label ?? ariaLabel}
           className="absolute z-[90] mt-1 max-h-72 w-full overflow-y-auto rounded-sm border border-white/10 bg-(--bg-elevated) py-1 shadow-[0_12px_40px_rgba(0,0,0,0.55)]"
         >
           {options.map((option) => {

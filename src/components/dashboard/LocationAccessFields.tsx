@@ -2,11 +2,11 @@
 
 import { accessibleLocations, hasAllLocationAccess } from "@/lib/auth/location-access";
 import { getAllLocations } from "@/data/locations";
-import type { UserProfile, UserRole } from "@/types";
+import type { UserProfile } from "@/types";
 
 type Props = {
   actor: UserProfile;
-  role: UserRole;
+  role: string;
   value: string[] | null;
   onChange: (ids: string[] | null) => void;
   locked?: boolean;

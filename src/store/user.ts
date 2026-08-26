@@ -14,14 +14,24 @@ import {
   apiSignup,
   apiUpdateMe,
 } from "@/lib/api-mutations";
+import { clearClientAccessToken, setClientAccessToken } from "@/lib/auth/client-token";
 import { useInventoryStore } from "@/store/inventory";
 import { useBranchStore } from "@/store/branch";
+import { useWishlistStore } from "@/store/wishlist";
+import { useCartStore } from "@/store/cart";
 import { setCurrentActorId } from "@/lib/current-actor";
 
 export { isStaffRole, canManageUsers };
 
-function applySession(isLoggedIn: boolean, profile: UserProfile) {
+function applyAuth(isLoggedIn: boolean, profile: UserProfile) {
   setCurrentActorId(isLoggedIn ? profile.id : undefined);
+  if (isLoggedIn) {
+    useWishlistStore.getState().bindUser(profile.id);
+    useCartStore.getState().bindUser(profile.id);
+  } else {
+    useWishlistStore.getState().unbindUser();
+    useCartStore.getState().unbindUser();
+  }
   return { isLoggedIn, profile };
 }
 
@@ -43,9 +53,12 @@ type UserState = {
   setPreferredBranch: (id: string) => void;
   updateName: (name: string) => Promise<void>;
   updateProfile: (
-    patch: Partial<Pick<UserProfile, "name" | "email" | "avatarUrl">> & { password?: string },
+    patch: Partial<Pick<UserProfile, "name" | "email" | "avatarUrl">> & {
+      password?: string;
+      currentPassword?: string;
+    },
   ) => Promise<void>;
-  changePassword: (password: string) => Promise<void>;
+  changePassword: (password: string, currentPassword: string) => Promise<void>;
   redeemPoints: (points: number) => boolean;
   addOrder: (order: Order, options?: { loyaltyPoints?: number }) => void;
   cancelOrder: (orderId: string) => Order | null;
@@ -58,14 +71,16 @@ export const useUserStore = create<UserState>()((set, get) => ({
   profile: demoUser,
   authReady: false,
   login: async (email, password) => {
-    const { user } = await apiLogin(email, password);
+    const { user, accessToken } = await apiLogin(email, password);
+    setClientAccessToken(accessToken);
     syncPreferredBranch(user);
-    set({ ...applySession(true, user), authReady: true });
+    set({ ...applyAuth(true, user), authReady: true });
   },
   signup: async (name, email, password) => {
-    const { user } = await apiSignup(name, email, password);
+    const { user, accessToken } = await apiSignup(name, email, password);
+    setClientAccessToken(accessToken);
     syncPreferredBranch(user);
-    set({ ...applySession(true, user), authReady: true });
+    set({ ...applyAuth(true, user), authReady: true });
   },
   logout: async () => {
     try {
@@ -73,15 +88,17 @@ export const useUserStore = create<UserState>()((set, get) => ({
     } catch (error) {
       console.error(error);
     }
-    set({ ...applySession(false, demoUser), authReady: true });
+    clearClientAccessToken();
+    set({ ...applyAuth(false, demoUser), authReady: true });
   },
   hydrateSession: async () => {
     try {
       const { user } = await apiMe();
       syncPreferredBranch(user);
-      set({ ...applySession(true, user), authReady: true });
+      set({ ...applyAuth(true, user), authReady: true });
     } catch {
-      set({ ...applySession(false, demoUser), authReady: true });
+      clearClientAccessToken();
+      set({ ...applyAuth(false, demoUser), authReady: true });
     }
   },
   addViewed: (productId) =>
@@ -108,14 +125,14 @@ export const useUserStore = create<UserState>()((set, get) => ({
     }),
   updateName: async (name) => {
     const { user } = await apiUpdateMe({ name });
-    set((s) => applySession(s.isLoggedIn, user));
+    set((s) => applyAuth(s.isLoggedIn, user));
   },
   updateProfile: async (patch) => {
     const { user } = await apiUpdateMe(patch);
-    set((s) => applySession(s.isLoggedIn, user));
+    set((s) => applyAuth(s.isLoggedIn, user));
   },
-  changePassword: async (password) => {
-    await apiUpdateMe({ password });
+  changePassword: async (password, currentPassword) => {
+    await apiUpdateMe({ password, currentPassword });
   },
   redeemPoints: (points) => {
     const current = get().profile.loyaltyPoints;
@@ -157,7 +174,7 @@ export const useUserStore = create<UserState>()((set, get) => ({
           if (res.inventory) {
             useInventoryStore
               .getState()
-              .syncFromServer(res.inventory.stocks, res.inventory.seats);
+              .syncFromServer(res.inventory.stocks, res.inventory.seats, res.inventory.hidden);
           }
         })
         .catch(console.error);

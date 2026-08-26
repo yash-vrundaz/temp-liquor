@@ -12,16 +12,16 @@ import {
   type AccessInput,
   type Permission,
 } from "@/lib/auth/permissions";
-import { ROLE_BLURBS, ROLE_LABELS, USER_ROLES } from "@/lib/auth/roles";
-import type { UserRole } from "@/types";
+import { ROLE_BLURBS, roleBlurb, roleLabel, USER_ROLES } from "@/lib/auth/roles";
 import { cn } from "@/lib/utils";
 import { tableHeadRowClass } from "@/components/ui/SortableTh";
 
 type Props = {
-  highlight?: UserRole;
+  highlight?: string;
+  roles?: string[];
 };
 
-export function RolePermissionsMatrix({ highlight }: Props) {
+export function RolePermissionsMatrix({ highlight, roles = USER_ROLES }: Props) {
   const [open, setOpen] = useState<Record<string, boolean>>(() =>
     Object.fromEntries(PERMISSION_GROUPS.map((group) => [group, true])),
   );
@@ -29,7 +29,7 @@ export function RolePermissionsMatrix({ highlight }: Props) {
   return (
     <div className="space-y-4">
       <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-4">
-        {USER_ROLES.map((role) => {
+        {roles.map((role) => {
           const count = rolePermissions(role).length;
           const active = highlight === role;
           return (
@@ -43,12 +43,14 @@ export function RolePermissionsMatrix({ highlight }: Props) {
               )}
             >
               <div className="flex items-center justify-between gap-2">
-                <p className="text-sm text-cream">{ROLE_LABELS[role]}</p>
+                <p className="text-sm text-cream">{roleLabel(role)}</p>
                 {active ? (
                   <span className="text-[10px] uppercase tracking-[0.14em] text-gold">You</span>
                 ) : null}
               </div>
-              <p className="mt-2 flex-1 text-[12px] leading-5 text-muted line-clamp-3">{ROLE_BLURBS[role]}</p>
+              <p className="mt-2 flex-1 text-[12px] leading-5 text-muted line-clamp-3">
+                {roleBlurb(role) || ROLE_BLURBS.staff}
+              </p>
               <p className="mt-3 text-[10px] uppercase tracking-[0.14em] text-gold">
                 {count} permission{count === 1 ? "" : "s"}
               </p>
@@ -82,13 +84,14 @@ export function RolePermissionsMatrix({ highlight }: Props) {
               {expanded ? (
                 <ul className="divide-y divide-white/5">
                   {read ? (
-                    <MobilePermissionRow permission={read} highlight={highlight} hint="read access" />
+                    <MobilePermissionRow permission={read} highlight={highlight} hint="read access" roles={roles} />
                   ) : null}
                   {actions.map((permission) => (
                     <MobilePermissionRow
                       key={permission}
                       permission={permission}
                       highlight={highlight}
+                      roles={roles}
                     />
                   ))}
                 </ul>
@@ -111,7 +114,7 @@ export function RolePermissionsMatrix({ highlight }: Props) {
           <thead>
           <tr className={`${tableHeadRowClass} border-b border-(--gold)/30`}>
               <th className="px-4 py-3 font-medium">Permission</th>
-              {USER_ROLES.map((role) => (
+              {roles.map((role) => (
                 <th
                   key={role}
                   className={cn(
@@ -119,7 +122,7 @@ export function RolePermissionsMatrix({ highlight }: Props) {
                     highlight === role && "text-gold",
                   )}
                 >
-                  {ROLE_LABELS[role]}
+                  {roleLabel(role)}
                 </th>
               ))}
             </tr>
@@ -138,6 +141,7 @@ export function RolePermissionsMatrix({ highlight }: Props) {
                   actions={actions}
                   total={items.length}
                   onToggle={() => setOpen((state) => ({ ...state, [group]: !expanded }))}
+                  roles={roles}
                 />
               );
             })}
@@ -152,10 +156,12 @@ function MobilePermissionRow({
   permission,
   highlight,
   hint,
+  roles,
 }: {
   permission: Permission;
-  highlight?: UserRole;
+  highlight?: string;
   hint?: string;
+  roles: string[];
 }) {
   const meta = PERMISSION_META[permission];
   return (
@@ -166,7 +172,7 @@ function MobilePermissionRow({
       </p>
       <p className="mt-0.5 text-[11px] text-muted">{meta.description}</p>
       <div className="mt-3 grid grid-cols-2 gap-2 sm:grid-cols-4">
-        {USER_ROLES.map((role) => {
+        {roles.map((role) => {
           const on = rolePermissions(role).includes(permission);
           const active = highlight === role;
           return (
@@ -177,7 +183,7 @@ function MobilePermissionRow({
                 active ? "border-(--gold)/40 bg-(--gold)/8" : "border-white/10",
               )}
             >
-              <span className={active ? "text-gold" : "text-muted"}>{ROLE_LABELS[role]}</span>
+              <span className={active ? "text-gold" : "text-muted"}>{roleLabel(role)}</span>
               <Check on={on} />
             </div>
           );
@@ -195,19 +201,21 @@ function GroupAccordion({
   actions,
   total,
   onToggle,
+  roles,
 }: {
   group: string;
   expanded: boolean;
-  highlight?: UserRole;
+  highlight?: string;
   read?: ReturnType<typeof permissionGroupTree>["read"];
   actions: ReturnType<typeof permissionGroupTree>["actions"];
   total: number;
   onToggle: () => void;
+  roles: string[];
 }) {
   return (
     <>
       <tr>
-        <td colSpan={1 + USER_ROLES.length} className="bg-white/[0.04] p-0">
+        <td colSpan={1 + roles.length} className="bg-white/[0.04] p-0">
           <button
             type="button"
             onClick={onToggle}
@@ -226,7 +234,7 @@ function GroupAccordion({
         </td>
       </tr>
       {expanded && read ? (
-        <PermissionMatrixRow permission={read} highlight={highlight} hint="grants read access" />
+        <PermissionMatrixRow permission={read} highlight={highlight} hint="grants read access" roles={roles} />
       ) : null}
       {expanded
         ? actions.map((permission) => (
@@ -235,6 +243,7 @@ function GroupAccordion({
               permission={permission}
               highlight={highlight}
               indent={Boolean(read)}
+              roles={roles}
             />
           ))
         : null}
@@ -247,11 +256,13 @@ function PermissionMatrixRow({
   highlight,
   indent,
   hint,
+  roles,
 }: {
   permission: Permission;
-  highlight?: UserRole;
+  highlight?: string;
   indent?: boolean;
   hint?: string;
+  roles: string[];
 }) {
   const meta = PERMISSION_META[permission];
   return (
@@ -263,7 +274,7 @@ function PermissionMatrixRow({
         </p>
         <p className="mt-0.5 truncate text-[11px] text-muted">{meta.description}</p>
       </td>
-      {USER_ROLES.map((role) => (
+      {roles.map((role) => (
         <td
           key={role}
           className={cn(
@@ -324,8 +335,9 @@ export function RolePermissionsIntro() {
     <div className="flex items-start gap-2">
       <ShieldCheck size={16} className="mt-0.5 shrink-0 text-gold" />
       <p className="text-sm text-muted">
-        Role defaults are grouped below. Expand a section to compare Customer, Staff, Admin, and Owner.
-        You can still add or remove permissions for one account in Create user / Edit profile.
+        Role defaults are grouped below. Built-in roles are always available, and you can add
+        custom roles with a tailored permission set. You can still add or remove permissions for
+        one user in Create user / Edit profile.
       </p>
     </div>
   );

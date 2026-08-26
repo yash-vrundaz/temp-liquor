@@ -1,6 +1,6 @@
 import { getAllLocations, getLocationById } from "@/data/locations";
 import { getProductById, products } from "@/data/products";
-import { getLiveStock } from "@/store/inventory";
+import { getLiveStock, useInventoryStore } from "@/store/inventory";
 import type { CartItem, Product, StoreLocation } from "@/types";
 
 export type CartLineAvailability = {
@@ -33,6 +33,7 @@ export type CartAvailability = {
 };
 
 export function getAvailableStock(locationId: string, productId: string) {
+  if (useInventoryStore.getState().isHidden(locationId, productId)) return 0;
   return getLiveStock(locationId, productId);
 }
 

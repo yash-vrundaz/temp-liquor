@@ -99,7 +99,7 @@ function LoginForm() {
 
 export default function LoginPage() {
   return (
-    <Suspense>
+    <Suspense fallback={<div className="px-4 py-24 text-center text-sm text-muted">Loading…</div>}>
       <LoginForm />
     </Suspense>
   );

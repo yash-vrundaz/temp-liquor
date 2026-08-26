@@ -12,12 +12,11 @@ import {
   type AccessInput,
   type Permission,
 } from "@/lib/auth/permissions";
-import { ROLE_LABELS } from "@/lib/auth/roles";
-import type { UserRole } from "@/types";
+import { roleLabel } from "@/lib/auth/roles";
 import { cn } from "@/lib/utils";
 
 type Props = {
-  role: UserRole;
+  role: string;
   enabled: Permission[];
   actor: AccessInput;
   onChange: (enabled: Permission[]) => void;
@@ -67,7 +66,7 @@ export function UserPermissionEditor({ role, enabled, actor, onChange, locked }:
       <div>
         <p className="text-[10px] uppercase tracking-[0.18em] text-gold">Permissions for this user</p>
         <p className="mt-1 text-[12px] text-muted">
-          {ROLE_LABELS[role]} defaults are marked Role. Expand a section, then check extras like Reset
+          {roleLabel(role)} defaults are marked Role. Expand a section, then check extras like Reset
           store or Reset password for this person only.
         </p>
       </div>

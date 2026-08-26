@@ -6,6 +6,7 @@ import Image from "next/image";
 import { AnimatePresence, motion } from "framer-motion";
 import { ShoppingBag, X } from "lucide-react";
 import { useCartFeedbackStore } from "@/store/cart-feedback";
+import { useWishlistFeedbackStore } from "@/store/wishlist-feedback";
 import { getProductById } from "@/data/products";
 import { Button } from "@/components/ui/Button";
 
@@ -16,6 +17,7 @@ export function CartAddedToast() {
 
   useEffect(() => {
     if (!notice) return;
+    useWishlistFeedbackStore.getState().dismiss();
     const timer = window.setTimeout(() => dismiss(), 4200);
     return () => window.clearTimeout(timer);
   }, [notice, dismiss]);

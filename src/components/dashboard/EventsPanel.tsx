@@ -11,6 +11,7 @@ import {
 import { hasPermission } from "@/lib/auth/permissions";
 import { accessibleLocations, canAccessLocation } from "@/lib/auth/location-access";
 import { isDbConnected, removeRuntimeEvent, upsertRuntimeEvent } from "@/lib/runtime-data";
+import { ConnectionNotice } from "@/components/dashboard/ConnectionNotice";
 import { useRuntimeEvents } from "@/hooks/useRuntimeEvents";
 import { useUserStore } from "@/store/user";
 import type { EventItem } from "@/types";
@@ -212,9 +213,7 @@ export function EventsPanel() {
         ) : null}
       </div>
       {!dbReady ? (
-        <p className="mt-4 text-sm text-amber-200/90">
-          Connect the database to add, edit, or remove events. Seed events are view-only in demo mode.
-        </p>
+        <ConnectionNotice className="mt-4" feature="add or edit events" preview />
       ) : null}
       {error ? <p className="mt-4 text-sm text-red-300">{error}</p> : null}
 

@@ -47,6 +47,8 @@ export type InventoryItem = {
   stock: number;
   promoPrice?: number;
   featured?: boolean;
+  /** Hidden from the public shop at this branch only. */
+  hidden?: boolean;
 };
 
 export type InventoryLedgerReason =
@@ -76,8 +78,10 @@ export type ActivityAction =
   | "inventory.adjust"
   | "inventory.restock"
   | "inventory.reset"
+  | "inventory.visibility"
   | "catalog.created"
   | "catalog.updated"
+  | "catalog.deleted"
   | "category.created"
   | "category.updated"
   | "category.deleted"
@@ -97,7 +101,13 @@ export type ActivityAction =
   | "event.updated"
   | "event.deleted"
   | "delivery.assigned"
-  | "delivery.status";
+  | "delivery.status"
+  | "driver.created"
+  | "driver.updated"
+  | "driver.deactivated"
+  | "role.created"
+  | "role.updated"
+  | "role.deleted";
 
 export type ActivityEntityType =
   | "user"
@@ -108,7 +118,9 @@ export type ActivityEntityType =
   | "event"
   | "location"
   | "profile"
-  | "delivery";
+  | "delivery"
+  | "driver"
+  | "role";
 
 export type ActivityLogEntry = {
   id: string;
@@ -145,7 +157,11 @@ export type StoreLocation = {
   services: string[];
   parking: string;
   pickupAvailable: boolean;
+  deliveryAvailable: boolean;
   deliveryRadiusKm: number;
+  deliveryFee: number;
+  deliveryFreeMinimum: number;
+  taxRate: number;
   inventory: InventoryItem[];
   featuredOffers: string[];
   description: string;
@@ -248,7 +264,7 @@ export type ManagedUser = {
   id: string;
   name: string;
   email: string;
-  role: UserRole;
+  role: string;
   active: boolean;
   hasPassword: boolean;
   loyaltyPoints: number;
@@ -290,7 +306,7 @@ export type UserProfile = {
   id: string;
   name: string;
   email: string;
-  role: UserRole;
+  role: string;
   active: boolean;
   preferredBranchId: string;
   loyaltyPoints: number;

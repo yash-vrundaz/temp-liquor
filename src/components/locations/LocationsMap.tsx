@@ -79,7 +79,6 @@ export function LocationsMap({
 
     async function init() {
       const L = await import("leaflet");
-      await import("leaflet/dist/leaflet.css");
       if (cancelled || !containerRef.current || mapRef.current) return;
 
       leafletRef.current = L;

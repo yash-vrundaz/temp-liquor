@@ -14,7 +14,8 @@ import { products as seedProducts } from "@/data/products";
 import { locations as seedLocations } from "@/data/locations";
 import { events as seedEvents, reviews as seedReviews, demoUser } from "@/data/events";
 import { getCouponDiscount } from "@/lib/commerce";
-import { calculateShipping, calculateTax } from "@/lib/utils";
+import { calculateShipping, calculateTax } from "@/lib/fulfillment-pricing";
+import { ensureLocationPricingSchema, mapLocationPricing } from "@/lib/db/location-pricing";
 import type { Prisma } from "@prisma/client";
 import { recordActivity } from "@/lib/db/activity";
 import { attachProfileExtras } from "@/lib/db/users";
@@ -69,6 +70,7 @@ export async function fetchProductById(id: string) {
 
 export async function fetchAllLocations() {
   if (!isDbConfigured()) return seedLocations;
+  await ensureLocationPricingSchema();
   const rows = await prisma.location.findMany({
     include: { inventory: true },
     orderBy: { name: "asc" },
@@ -231,27 +233,97 @@ export async function fetchReviewsForProduct(productId: string) {
 export async function fetchInventoryState() {
   if (!isDbConfigured()) {
     const stocks: Record<string, number> = {};
+    const hidden: Record<string, boolean> = {};
     for (const loc of seedLocations) {
       for (const row of loc.inventory) {
         stocks[`${loc.id}:${row.productId}`] = row.stock;
+        if (row.hidden) hidden[`${loc.id}:${row.productId}`] = true;
       }
     }
     const seats: Record<string, number> = {};
     for (const e of seedEvents) seats[e.id] = e.seatsAvailable;
-    return { stocks, seats };
+    return { stocks, seats, hidden };
   }
 
-  const rows = await prisma.locationInventory.findMany();
+  await ensureInventoryVisibilityColumn();
+
+  const rows = await prisma.$queryRaw<
+    { location_id: string; product_id: string; on_hand: number; hidden: boolean }[]
+  >`
+    SELECT location_id, product_id, on_hand, COALESCE(hidden, false) AS hidden
+    FROM location_inventory
+  `;
   const stocks: Record<string, number> = {};
+  const hidden: Record<string, boolean> = {};
   for (const row of rows) {
-    stocks[`${row.locationId}:${row.productId}`] = row.onHand;
+    const key = `${row.location_id}:${row.product_id}`;
+    stocks[key] = row.on_hand;
+    if (row.hidden) hidden[key] = true;
   }
 
   const events = await prisma.event.findMany();
   const seats: Record<string, number> = {};
   for (const e of events) seats[e.id] = e.seatsAvailable;
 
-  return { stocks, seats };
+  return { stocks, seats, hidden };
+}
+
+let visibilityColumnReady = false;
+
+async function ensureInventoryVisibilityColumn() {
+  if (!isDbConfigured() || visibilityColumnReady) return;
+  await prisma.$executeRawUnsafe(
+    `ALTER TABLE location_inventory ADD COLUMN IF NOT EXISTS hidden BOOLEAN NOT NULL DEFAULT false`,
+  );
+  visibilityColumnReady = true;
+}
+
+export async function setProductVisibility(
+  locationId: string,
+  productId: string,
+  hidden: boolean,
+  actorUserId?: string,
+) {
+  if (!isDbConfigured()) return { hidden };
+  await ensureInventoryVisibilityColumn();
+
+  const existing = await prisma.locationInventory.findUnique({
+    where: { locationId_productId: { locationId, productId } },
+  });
+  if (existing) {
+    await prisma.$executeRaw`
+      UPDATE location_inventory
+      SET hidden = ${hidden}
+      WHERE location_id = ${locationId} AND product_id = ${productId}
+    `;
+  } else {
+    await prisma.locationInventory.create({
+      data: {
+        locationId,
+        productId,
+        seedStock: 0,
+        onHand: 0,
+        featured: false,
+      },
+    });
+    await prisma.$executeRaw`
+      UPDATE location_inventory
+      SET hidden = ${hidden}
+      WHERE location_id = ${locationId} AND product_id = ${productId}
+    `;
+  }
+
+  await recordActivity({
+    actorUserId,
+    action: "inventory.visibility",
+    entityType: "inventory",
+    entityId: productId,
+    locationId,
+    summary: `${hidden ? "Hid" : "Showed"} bottle on this store's website`,
+    metadata: { productId, hidden },
+  });
+
+  return { hidden, inventory: await fetchInventoryState() };
 }
 
 export async function fetchUserByEmail(email: string): Promise<UserProfile | null> {
@@ -513,6 +585,33 @@ export async function createCustomProduct(
   });
 
   return { product, inventory: await fetchInventoryState() };
+}
+
+export async function deleteCustomProduct(productId: string, actorUserId?: string) {
+  if (!isDbConfigured()) return { error: "Database is not configured.", status: 503 as const };
+  const existing = await prisma.product.findUnique({ where: { id: productId } });
+  if (!existing) return { error: "Bottle not found.", status: 404 as const };
+  if (!existing.isCustom) {
+    return { error: "Seed catalog bottles cannot be deleted.", status: 400 as const };
+  }
+  const sold = await prisma.orderItem.count({ where: { productId } });
+  if (sold > 0) {
+    return { error: "This bottle is on past orders and cannot be deleted.", status: 409 as const };
+  }
+  await prisma.$transaction(async (tx) => {
+    await tx.locationInventory.deleteMany({ where: { productId } });
+    await tx.review.deleteMany({ where: { productId } });
+    await tx.inventoryLedger.deleteMany({ where: { productId } });
+    await tx.product.delete({ where: { id: productId } });
+  });
+  await recordActivity({
+    actorUserId,
+    action: "catalog.deleted",
+    entityType: "product",
+    entityId: productId,
+    summary: `Removed bottle “${existing.name}” (${existing.brand})`,
+  });
+  return { ok: true as const, id: productId, inventory: await fetchInventoryState() };
 }
 
 export async function updateCatalogProduct(
@@ -796,7 +895,13 @@ async function ensureCustomer(
   // so strangers cannot attach orders to someone else's history.
   const existing = await tx.user.findUnique({ where: { email } });
   if (existing) {
-    throw new Error("An account with this email already exists. Sign in to place the order.");
+    const auth = await tx.$queryRaw<{ password_hash: string | null }[]>`
+      SELECT password_hash FROM users WHERE id = ${existing.id} LIMIT 1
+    `;
+    if (auth[0]?.password_hash) {
+      throw new Error("An account with this email already exists. Sign in to place the order.");
+    }
+    return existing;
   }
   return tx.user.create({
     data: {
@@ -828,12 +933,22 @@ export async function placeOrder(input: {
     throw new Error("Database is not configured.");
   }
 
+  await ensureInventoryVisibilityColumn();
+  await ensureLocationPricingSchema();
+
   const result = await prisma.$transaction(async (tx) => {
     const location = await tx.location.findUnique({
       where: { id: input.locationId },
       include: { inventory: true },
     });
     if (!location) throw new Error("Location not found.");
+    const pricing = mapLocationPricing(location);
+    if (input.fulfillment === "delivery" && !pricing.deliveryAvailable) {
+      throw new Error("Delivery is not available from this store.");
+    }
+    if (input.fulfillment === "pickup" && !location.pickupAvailable) {
+      throw new Error("Pickup is not available from this store.");
+    }
 
     const orderItems: Order["items"] = [];
     let subtotal = 0;
@@ -841,6 +956,15 @@ export async function placeOrder(input: {
       const product = await tx.product.findUnique({ where: { id: item.productId } });
       if (!product) throw new Error(`Unknown product: ${item.productId}`);
       const inv = location.inventory.find((row) => row.productId === item.productId);
+      const hiddenRows = await tx.$queryRaw<{ hidden: boolean }[]>`
+        SELECT COALESCE(hidden, false) AS hidden
+        FROM location_inventory
+        WHERE location_id = ${input.locationId} AND product_id = ${item.productId}
+        LIMIT 1
+      `;
+      if (hiddenRows[0]?.hidden) {
+        throw new Error(`${product.name} is not available at this store.`);
+      }
       const unitPrice = inv?.promoPrice ?? product.price;
       orderItems.push({
         productId: item.productId,
@@ -851,8 +975,8 @@ export async function placeOrder(input: {
     }
 
     const discount = getCouponDiscount(input.coupon, subtotal);
-    const shipping = calculateShipping(subtotal - discount, input.fulfillment);
-    const tax = calculateTax(subtotal - discount);
+    const shipping = calculateShipping(subtotal - discount, input.fulfillment, pricing);
+    const tax = calculateTax(subtotal - discount, pricing);
     const total = subtotal - discount + shipping + tax;
     const orderId = `ORD-${Date.now().toString(36).toUpperCase()}-${Math.floor(
       Math.random() * 900 + 100,

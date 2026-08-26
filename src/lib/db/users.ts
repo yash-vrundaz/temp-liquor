@@ -4,7 +4,9 @@ import { mapUser } from "@/lib/db/mappers";
 import { mapOrder } from "@/lib/db/mappers";
 import { recordActivity } from "@/lib/db/activity";
 import { hashPassword, validatePassword, verifyPassword } from "@/lib/auth/password";
-import { canAssignRole, canDeactivateUser, canEditUser, canResetPassword, DEMO_PASSWORD, isDemoAccountEmail, isUserRole } from "@/lib/auth/roles";
+import { canAssignRole, canDeactivateUser, canEditUser, canResetPassword, DEMO_PASSWORD, isDemoAccountEmail } from "@/lib/auth/roles";
+import { isKnownRole } from "@/lib/auth/role-catalog";
+import { warmRoleCatalog } from "@/lib/db/roles-admin";
 import {
   hasPermission,
   normalizeOverrides,
@@ -17,7 +19,7 @@ import {
   sanitizeAssignedLocations,
 } from "@/lib/auth/location-access";
 import { listLocationIds } from "@/lib/db/store-admin";
-import type { ManagedUser, UserProfile, UserRole } from "@/types";
+import type { ManagedUser, UserProfile } from "@/types";
 
 function userInclude() {
   return {
@@ -125,17 +127,14 @@ export async function authenticateUser(
   if (auth.active === false) return { error: "This account is deactivated.", status: 403 };
 
   let hash = auth.password_hash;
-  if (!hash && isDemoAccountEmail(normalized)) {
+  if (!hash && isDemoAccountEmail(normalized) && process.env.NODE_ENV !== "production") {
     hash = await hashPassword(DEMO_PASSWORD);
     await prisma.$executeRaw`
       UPDATE users SET password_hash = ${hash}, active = true WHERE id = ${auth.id}
     `;
   }
   if (!hash) {
-    return {
-      error: "This email has no password yet. Create one with Sign up.",
-      status: 400,
-    };
+    return { error: "Invalid email or password.", status: 401 };
   }
 
   const ok = await verifyPassword(password, hash);
@@ -167,10 +166,7 @@ export async function signupCustomer(input: {
   });
 
   if (existing) {
-    const auth = await loadAuthColumns(email);
-    if (auth?.password_hash) {
-      return { error: "An account with this email already exists. Sign in instead.", status: 409 };
-    }
+    return { error: "An account with this email already exists. Sign in instead.", status: 409 };
   }
 
   const data = {
@@ -178,25 +174,19 @@ export async function signupCustomer(input: {
     email,
     role: "customer" as const,
     preferredBranchId: input.preferredBranchId || "loc1",
-    loyaltyPoints: existing?.loyaltyPoints ?? 0,
-    loyaltyTier: existing?.loyaltyTier ?? "Member",
-    addresses: existing?.addresses ?? [],
-    recentlyViewed: existing?.recentlyViewed ?? [],
+    loyaltyPoints: 0,
+    loyaltyTier: "Member",
+    addresses: [],
+    recentlyViewed: [],
   };
 
-  const row = existing
-    ? await prisma.user.update({
-        where: { id: existing.id },
-        data,
-        include: userInclude(),
-      })
-    : await prisma.user.create({
-        data: {
-          id: `u-${crypto.randomUUID()}`,
-          ...data,
-        },
-        include: userInclude(),
-      });
+  const row = await prisma.user.create({
+    data: {
+      id: `u-${crypto.randomUUID()}`,
+      ...data,
+    },
+    include: userInclude(),
+  });
 
   await prisma.$executeRaw`
     UPDATE users SET password_hash = ${passwordHash}, active = true WHERE id = ${row.id}
@@ -205,12 +195,10 @@ export async function signupCustomer(input: {
   const user = await attachProfileExtras(mapUser(row, row.orders.map(mapOrder)));
   await recordActivity({
     actorUserId: user.id,
-    action: existing ? "auth.signup" : "auth.signup",
+    action: "auth.signup",
     entityType: "user",
     entityId: user.id,
-    summary: existing
-      ? `${user.name} claimed their account with a password`
-      : `${user.name} created a customer account`,
+    summary: `${user.name} created a customer account`,
   });
   return { user };
 }
@@ -234,9 +222,9 @@ type SqlUserRow = {
 };
 
 function toManagedUserFromSql(row: SqlUserRow): ManagedUser {
-  const role = row.role as UserRole;
+  const role = row.role;
   const overrides = normalizeOverrides(
-    isUserRole(role) ? role : "customer",
+    isKnownRole(role) ? role : "customer",
     parsePermissions(row.permission_grants),
     parsePermissions(row.permission_revokes),
   );
@@ -262,7 +250,7 @@ function toManagedUserFromSql(row: SqlUserRow): ManagedUser {
 
 function sanitizeOverrides(
   actor: UserProfile,
-  role: UserRole,
+  role: string,
   grants?: readonly string[],
   revokes?: readonly string[],
   previous?: { permissionGrants?: readonly string[]; permissionRevokes?: readonly string[] },
@@ -418,7 +406,7 @@ export async function createManagedUser(
     name: string;
     email: string;
     password: string;
-    role: UserRole;
+    role: string;
     preferredBranchId?: string;
     avatarUrl?: string;
     permissionGrants?: readonly string[];
@@ -435,6 +423,8 @@ export async function createManagedUser(
   const passwordError = validatePassword(input.password);
   if (passwordError) return { error: passwordError, status: 400 };
   if (!isDbConfigured()) return { error: "Database is not configured.", status: 503 };
+  await warmRoleCatalog();
+  if (!isKnownRole(input.role)) return { error: "Unknown role.", status: 400 };
   await ensureUserColumns();
 
   const email = input.email.trim().toLowerCase();
@@ -500,7 +490,7 @@ export async function patchManagedUser(
     userId: string;
     name?: string;
     email?: string;
-    role?: UserRole;
+    role?: string;
     active?: boolean;
     password?: string;
     avatarUrl?: string | null;
@@ -510,6 +500,7 @@ export async function patchManagedUser(
   },
 ): Promise<{ user: ManagedUser; error?: undefined } | { user?: undefined; error: string; status: number }> {
   if (!isDbConfigured()) return { error: "Database is not configured.", status: 503 };
+  await warmRoleCatalog();
   await ensureUserColumns();
 
   const existingRows = await prisma.$queryRaw<
@@ -533,7 +524,8 @@ export async function patchManagedUser(
   `;
   const target = existingRows[0];
   if (!target) return { error: "User not found.", status: 404 };
-  if (!isUserRole(target.role)) return { error: "Unknown role.", status: 400 };
+  if (!isKnownRole(target.role)) return { error: "Unknown role.", status: 400 };
+  if (input.role && !isKnownRole(input.role)) return { error: "Unknown role.", status: 400 };
   const isSelf = actor.id === input.userId;
   const canEdit = canEditUser(actor, target.role) || isSelf;
   const canReset = canResetPassword(actor, target.role) || isSelf;
@@ -622,7 +614,7 @@ export async function patchManagedUser(
     `;
   }
 
-  const nextRole = input.role && isUserRole(input.role) ? input.role : target.role;
+  const nextRole = input.role && isKnownRole(input.role) ? input.role : target.role;
   const explicitPermissions =
     input.permissionGrants !== undefined || input.permissionRevokes !== undefined;
   const roleChanged = Boolean(input.role && input.role !== target.role);
@@ -736,9 +728,20 @@ export async function patchManagedUser(
   return { user };
 }
 
-export async function updateOwnPassword(userId: string, password: string) {
+export async function updateOwnPassword(
+  userId: string,
+  password: string,
+  currentPassword: string,
+) {
   const passwordError = validatePassword(password);
   if (passwordError) throw new Error(passwordError);
+  const rows = await prisma.$queryRaw<{ password_hash: string | null }[]>`
+    SELECT password_hash FROM users WHERE id = ${userId} LIMIT 1
+  `;
+  const hash = rows[0]?.password_hash;
+  if (!hash) throw new Error("Current password is incorrect.");
+  const ok = await verifyPassword(currentPassword, hash);
+  if (!ok) throw new Error("Current password is incorrect.");
   const passwordHash = await hashPassword(password);
   await prisma.$executeRaw`
     UPDATE users SET password_hash = ${passwordHash} WHERE id = ${userId}

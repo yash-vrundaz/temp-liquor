@@ -12,6 +12,9 @@ import {
 import { hashPassword } from "../src/lib/auth/password";
 import { DEMO_PASSWORD } from "../src/lib/auth/roles";
 import { ensureDeliverySchema } from "../src/lib/db/delivery";
+import { ensureLocationPricingSchema } from "../src/lib/db/location-pricing";
+import { ensureRoleDefinitionsSchema } from "../src/lib/db/roles-admin";
+import { drivers } from "../src/data/drivers";
 import type { Order, Product, StoreLocation, UserProfile } from "../src/types";
 
 const prisma = new PrismaClient();
@@ -71,7 +74,11 @@ function locationRow(loc: StoreLocation) {
     services: loc.services,
     parking: loc.parking,
     pickupAvailable: loc.pickupAvailable,
+    deliveryAvailable: loc.deliveryAvailable,
     deliveryRadiusKm: loc.deliveryRadiusKm,
+    deliveryFee: loc.deliveryFee,
+    deliveryFreeMinimum: loc.deliveryFreeMinimum,
+    taxRate: loc.taxRate,
     featuredOffers: loc.featuredOffers,
     description: loc.description,
   };
@@ -141,11 +148,13 @@ async function seedLocations() {
           onHand: item.stock,
           promoPrice: item.promoPrice ?? null,
           featured: item.featured ?? false,
+          hidden: item.hidden ?? false,
         },
         update: {
           seedStock: item.stock,
           promoPrice: item.promoPrice ?? null,
           featured: item.featured ?? false,
+          hidden: item.hidden ?? false,
         },
       });
     }
@@ -275,6 +284,36 @@ async function seedOrders(userId: string, orders: Order[]) {
   }
 }
 
+async function seedDrivers() {
+  await ensureDeliverySchema();
+  for (const driver of drivers) {
+    await prisma.driver.upsert({
+      where: { id: driver.id },
+      create: {
+        id: driver.id,
+        name: driver.name,
+        phone: driver.phone,
+        email: driver.email ?? null,
+        vehicle: driver.vehicle,
+        locationId: driver.locationId,
+        status: driver.status,
+        active: driver.active,
+        photoUrl: driver.photoUrl ?? null,
+      },
+      update: {
+        name: driver.name,
+        phone: driver.phone,
+        email: driver.email ?? null,
+        vehicle: driver.vehicle,
+        locationId: driver.locationId,
+        status: driver.status,
+        active: driver.active,
+        photoUrl: driver.photoUrl ?? null,
+      },
+    });
+  }
+}
+
 async function seedActivity() {
   const rows = [
     {
@@ -366,10 +405,14 @@ async function main() {
 
   const inventoryRows = locations.reduce((n, loc) => n + loc.inventory.length, 0);
   console.log(`Seeding ${locations.length} locations (${inventoryRows} inventory rows)…`);
+  await ensureLocationPricingSchema();
   await seedLocations();
 
-  console.log("Seeding drivers…");
-  await ensureDeliverySchema();
+  console.log(`Seeding ${drivers.length} drivers…`);
+  await seedDrivers();
+
+  console.log("Ensuring role_definitions table…");
+  await ensureRoleDefinitionsSchema();
 
   console.log(`Seeding ${events.length} events…`);
   await seedEvents();
@@ -389,7 +432,9 @@ async function main() {
   console.log("Seeding activity logs…");
   await seedActivity();
 
-  console.log("Done. Catalog, branches, events, reviews, demo users, orders, and activity are current.");
+  console.log(
+    "Done. Categories, products, locations (+ pricing), inventory, drivers, events, reviews, demo users, orders, activity, and role_definitions are current.",
+  );
 }
 
 main()

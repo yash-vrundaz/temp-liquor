@@ -15,7 +15,7 @@ import {
   type MutableRefObject,
 } from "react";
 import * as THREE from "three";
-import { products } from "@/data/products";
+import { getAllProducts } from "@/data/products";
 import type { Product } from "@/types";
 import { formatPrice } from "@/lib/utils";
 import Link from "next/link";
@@ -24,6 +24,7 @@ import { useCartStore } from "@/store/cart";
 import { addToCart } from "@/lib/add-to-cart";
 import { useBranchStore } from "@/store/branch";
 import { useInventoryStore } from "@/store/inventory";
+import { useCatalogStore } from "@/store/catalog";
 import { getPriceForLocation, getAllLocations } from "@/data/locations";
 import { LOW_STOCK_THRESHOLD } from "@/lib/inventory";
 import { OtherBranchStock } from "@/components/inventory/OtherBranchStock";
@@ -105,12 +106,30 @@ type Section = {
   /** Yaw — shelf faces local +Z after this rotation */
   rotY: number;
   hasShelves: boolean;
+  /** Category / flag matcher used when assigning live catalog bottles. */
   filter: (p: Product) => boolean;
 };
+
+const MIXED_CATEGORIES = new Set([
+  "liqueur",
+  "gin",
+  "rum",
+  "tequila",
+  "mezcal",
+  "wine",
+  "beer",
+  "cider",
+  "champagne",
+  "brandy",
+  "cognac",
+  "aperitif",
+  "vermouth",
+]);
 
 /**
  * U-shaped boutique. Side and back bays sit against the walls;
  * walk + mouse-look lets you reach every corner.
+ * Shelf filters are category/flag based so owner-added bottles land on racks.
  */
 const SECTIONS: Section[] = [
   { name: "Entrance", x: 0, z: 7.2, rotY: 0, hasShelves: false, filter: () => false },
@@ -120,7 +139,7 @@ const SECTIONS: Section[] = [
     z: 3.8,
     rotY: Math.PI / 2,
     hasShelves: true,
-    filter: (p) => p.brand === "Jack Daniel's" && p.category === "whiskey",
+    filter: (p) => p.category === "whiskey" || p.category === "bourbon",
   },
   {
     name: "Vodka",
@@ -128,7 +147,7 @@ const SECTIONS: Section[] = [
     z: 0,
     rotY: Math.PI / 2,
     hasShelves: true,
-    filter: (p) => p.brand === "Stillhouse",
+    filter: (p) => p.category === "vodka",
   },
   {
     name: "Flavors",
@@ -136,7 +155,7 @@ const SECTIONS: Section[] = [
     z: -3.5,
     rotY: Math.PI / 2,
     hasShelves: true,
-    filter: (p) => p.category === "liqueur",
+    filter: (p) => MIXED_CATEGORIES.has(p.category),
   },
   {
     name: "Scotch",
@@ -144,7 +163,7 @@ const SECTIONS: Section[] = [
     z: BACK,
     rotY: 0,
     hasShelves: true,
-    filter: (p) => p.brand === "The Glenlivet" && !p.isPremium,
+    filter: (p) => p.category === "scotch" && !p.isPremium,
   },
   {
     name: "Reserve",
@@ -152,7 +171,7 @@ const SECTIONS: Section[] = [
     z: BACK,
     rotY: 0,
     hasShelves: true,
-    filter: (p) => p.brand === "The Glenlivet" && p.isPremium,
+    filter: (p) => p.category === "scotch" && p.isPremium,
   },
   {
     name: "Premium",
@@ -172,6 +191,77 @@ const SECTIONS: Section[] = [
   },
   { name: "Checkout", x: 0, z: 4.8, rotY: 0, hasShelves: false, filter: () => false },
 ];
+
+/** Unique products only — never repeat the same bottle on one bay. */
+function uniqueShelf(list: Product[], max = 12) {
+  const seen = new Set<string>();
+  const out: Product[] = [];
+  for (const p of list) {
+    if (seen.has(p.id)) continue;
+    seen.add(p.id);
+    out.push(p);
+    if (out.length >= max) break;
+  }
+  return out;
+}
+
+function sortForShelf(list: Product[]) {
+  return [...list].sort((a, b) => {
+    if (a.isPremium !== b.isPremium) return a.isPremium ? -1 : 1;
+    if (a.isImported !== b.isImported) return a.isImported ? -1 : 1;
+    return a.name.localeCompare(b.name);
+  });
+}
+
+/**
+ * Place live catalog bottles on physical bays.
+ * Category bays fill first (exclusive). Premium / Imported are showcase bays
+ * that always show matching bottles so those filters have a home on the floor.
+ */
+function assignBottlesToBays(candidates: Product[]) {
+  const byName = new Map(SECTIONS.filter((s) => s.hasShelves).map((s) => [s.name, s]));
+  const used = new Set<string>();
+  const assigned = new Map<string, Product[]>();
+
+  const categoryOrder = ["Scotch", "Reserve", "Whiskey", "Vodka", "Flavors"] as const;
+
+  for (const name of categoryOrder) {
+    const section = byName.get(name);
+    if (!section) continue;
+    const matches = sortForShelf(
+      candidates.filter((p) => !used.has(p.id) && section.filter(p)),
+    );
+    const bottles = uniqueShelf(matches, 12);
+    for (const p of bottles) used.add(p.id);
+    assigned.set(name, bottles);
+  }
+
+  // Showcase bays — always surface premium / imported bottles on these racks
+  for (const name of ["Premium", "Imported"] as const) {
+    const section = byName.get(name);
+    if (!section) continue;
+    assigned.set(
+      name,
+      uniqueShelf(sortForShelf(candidates.filter((p) => section.filter(p))), 12),
+    );
+  }
+
+  const remaining = sortForShelf(candidates.filter((p) => !used.has(p.id)));
+  const overflowTargets = ["Flavors", "Whiskey", "Vodka", "Scotch", "Reserve"];
+  for (const product of remaining) {
+    const target = overflowTargets.find((name) => (assigned.get(name)?.length ?? 0) < 12);
+    if (!target) break;
+    const list = assigned.get(target) ?? [];
+    list.push(product);
+    assigned.set(target, list);
+    used.add(product.id);
+  }
+
+  return SECTIONS.filter((s) => s.hasShelves).map((section) => ({
+    section,
+    bottles: assigned.get(section.name) ?? [],
+  }));
+}
 
 function cameraFor(section: Section) {
   if (section.hasShelves) {
@@ -197,19 +287,6 @@ function cameraFor(section: Section) {
     pos: new THREE.Vector3(0, EYE, 7.4),
     look: new THREE.Vector3(0, 1.35, 0.5),
   };
-}
-
-/** Unique products only — never repeat the same bottle on one bay. */
-function uniqueShelf(list: Product[], max = 12) {
-  const seen = new Set<string>();
-  const out: Product[] = [];
-  for (const p of list) {
-    if (seen.has(p.id)) continue;
-    seen.add(p.id);
-    out.push(p);
-    if (out.length >= max) break;
-  }
-  return out;
 }
 
 class StoreErrorBoundary extends Component<{ children: ReactNode }, { error: string | null }> {
@@ -623,26 +700,14 @@ function StoreScene({
   setSelected,
   shelfCount,
   stockByProduct,
+  shelfData,
 }: {
   selected: Product | null;
   setSelected: (p: Product | null) => void;
   shelfCount: number;
   stockByProduct: Record<string, number>;
+  shelfData: { section: Section; bottles: Product[] }[];
 }) {
-  const shelfData = useMemo(() => {
-    const used = new Set<string>();
-    return SECTIONS.filter((s) => s.hasShelves).map((section) => {
-      let list = products.filter(section.filter);
-      // Premium / Imported share the floor — skip bottles already on earlier bays
-      if (section.name === "Premium" || section.name === "Imported" || section.name === "Reserve") {
-        list = list.filter((p) => !used.has(p.id));
-      }
-      const bottles = uniqueShelf(list, 12);
-      for (const p of bottles) used.add(p.id);
-      return { section, bottles };
-    });
-  }, []);
-
   return (
     <>
       <color attach="background" args={["#1a1510"]} />
@@ -677,6 +742,7 @@ export function VirtualStoreExperience() {
   const [ready, setReady] = useState(false);
   const [shelfCount, setShelfCount] = useState(0);
   const [walk, setWalk] = useState(false);
+
   const cartQty = useCartStore((s) =>
     selected
       ? (s.items.find((i) => i.productId === selected.id)?.quantity ?? 0)
@@ -685,12 +751,34 @@ export function VirtualStoreExperience() {
   const branchId = useBranchStore((s) => s.branchId);
   const branch = getAllLocations().find((l) => l.id === branchId) ?? getAllLocations()[0];
   const getOnHand = useInventoryStore((s) => s.getOnHand);
+  const isHidden = useInventoryStore((s) => s.isHidden);
   const inventoryRevision = useInventoryStore((s) => s.revision);
+  const catalogRevision = useCatalogStore((s) => s.revision);
+
+  const candidates = useMemo(
+    () => getAllProducts().filter((p) => !isHidden(branchId, p.id)),
+    [branchId, catalogRevision, inventoryRevision, isHidden],
+  );
+
+  const shelfData = useMemo(() => assignBottlesToBays(candidates), [candidates]);
+
   const stockByProduct = useMemo(() => {
     const map: Record<string, number> = {};
-    for (const p of products) map[p.id] = getOnHand(branchId, p.id);
+    for (const p of candidates) map[p.id] = getOnHand(branchId, p.id);
+    for (const bay of shelfData) {
+      for (const p of bay.bottles) {
+        if (map[p.id] == null) map[p.id] = getOnHand(branchId, p.id);
+      }
+    }
     return map;
-  }, [branchId, getOnHand, inventoryRevision]);
+  }, [branchId, candidates, getOnHand, shelfData, inventoryRevision]);
+
+  const bayCounts = useMemo(() => {
+    const map: Record<string, number> = {};
+    for (const bay of shelfData) map[bay.section.name] = bay.bottles.length;
+    return map;
+  }, [shelfData]);
+
   const selectedStock = selected ? (stockByProduct[selected.id] ?? 0) : 0;
   const selectedRemaining = Math.max(0, selectedStock - cartQty);
   const selectedPrice = selected
@@ -699,6 +787,14 @@ export function VirtualStoreExperience() {
   const start = useMemo(() => cameraFor(SECTIONS[0]), []);
   const look = useRef<LookState>(lookFromPoints(start.pos, start.look));
   const navigating = useRef(true);
+
+  useEffect(() => {
+    if (!selected) return;
+    const stillVisible = shelfData.some((bay) =>
+      bay.bottles.some((p) => p.id === selected.id),
+    );
+    if (!stillVisible) setSelected(null);
+  }, [selected, shelfData]);
 
   // Room first, then shelves in waves — keeps first paint fast
   useEffect(() => {
@@ -743,6 +839,7 @@ export function VirtualStoreExperience() {
             setSelected={setSelected}
             shelfCount={shelfCount}
             stockByProduct={stockByProduct}
+            shelfData={shelfData}
           />
           <CameraRig
             section={section}
@@ -755,7 +852,6 @@ export function VirtualStoreExperience() {
       </StoreErrorBoundary>
 
       <div className="pointer-events-none absolute inset-x-0 top-2 z-10 px-2 sm:top-3 sm:px-3 md:px-6">
-        {/* Mobile: select to avoid cramped 9-tab row */}
         <div className="pointer-events-auto mx-auto w-full max-w-6xl lg:hidden">
           <label className="sr-only" htmlFor="aisle-select">
             Aisle section
@@ -773,29 +869,33 @@ export function VirtualStoreExperience() {
           >
             {SECTIONS.map((s) => (
               <option key={s.name} value={s.name}>
-                {s.name}
+                {s.hasShelves ? `${s.name} (${bayCounts[s.name] ?? 0})` : s.name}
               </option>
             ))}
           </select>
         </div>
         <div className="pointer-events-auto mx-auto hidden w-full max-w-6xl overflow-x-auto rounded-sm border border-[var(--gold)]/30 bg-black/80 px-1.5 py-1.5 backdrop-blur-md lg:flex lg:flex-nowrap lg:items-center lg:justify-between lg:gap-0.5">
-          {SECTIONS.map((s) => (
-            <button
-              key={s.name}
-              type="button"
-              onClick={() => {
-                setWalk(false);
-                setSection(s);
-              }}
-              className={`min-w-0 shrink-0 whitespace-nowrap rounded-sm px-2 py-1.5 text-center text-[9px] uppercase tracking-[0.1em] md:flex-1 md:px-1 md:text-[10px] md:tracking-[0.12em] ${
-                section.name === s.name
-                  ? "bg-[var(--gold)] text-black"
-                  : "text-[var(--muted)] hover:text-[var(--cream)]"
-              }`}
-            >
-              {s.name}
-            </button>
-          ))}
+          {SECTIONS.map((s) => {
+            const count = s.hasShelves ? bayCounts[s.name] ?? 0 : null;
+            return (
+              <button
+                key={s.name}
+                type="button"
+                onClick={() => {
+                  setWalk(false);
+                  setSection(s);
+                }}
+                className={`min-w-0 shrink-0 whitespace-nowrap rounded-sm px-2 py-1.5 text-center text-[9px] uppercase tracking-[0.1em] md:flex-1 md:px-1 md:text-[10px] md:tracking-[0.12em] ${
+                  section.name === s.name
+                    ? "bg-[var(--gold)] text-black"
+                    : "text-[var(--muted)] hover:text-[var(--cream)]"
+                }`}
+              >
+                {s.name}
+                {count != null ? <span className="ml-1 opacity-70">{count}</span> : null}
+              </button>
+            );
+          })}
         </div>
       </div>
 
@@ -852,6 +952,21 @@ export function VirtualStoreExperience() {
               {selected.brand}
             </p>
             <h2 className="mt-1 font-display text-2xl text-[var(--cream)]">{selected.name}</h2>
+            <div className="mt-2 flex flex-wrap gap-1.5">
+              <span className="rounded-sm border border-white/15 px-2 py-0.5 text-[10px] uppercase tracking-[0.12em] text-[var(--muted)]">
+                {selected.category}
+              </span>
+              {selected.isPremium ? (
+                <span className="rounded-sm border border-[var(--gold)]/40 px-2 py-0.5 text-[10px] uppercase tracking-[0.12em] text-[var(--gold)]">
+                  Premium
+                </span>
+              ) : null}
+              {selected.isImported ? (
+                <span className="rounded-sm border border-sky-400/30 px-2 py-0.5 text-[10px] uppercase tracking-[0.12em] text-sky-200">
+                  Imported
+                </span>
+              ) : null}
+            </div>
             <p className="mt-1 text-sm text-[var(--muted)]">
               {selected.origin} · {selected.abv}% ABV
             </p>

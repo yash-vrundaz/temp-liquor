@@ -18,6 +18,7 @@ import {
   apiBookSeats,
   apiResetInventory,
   apiSetInventory,
+  apiSetProductVisibility,
 } from "@/lib/api-mutations";
 
 type DeductResult =
@@ -30,12 +31,16 @@ type DeductResult =
 type InventoryState = {
   stocks: Record<string, number>;
   seats: Record<string, number>;
+  /** Keys are locationId:productId — true means hidden on that store's website. */
+  hidden: Record<string, boolean>;
   ledger: InventoryLedgerEntry[];
   revision: number;
   hydrated: boolean;
   setHydrated: (value: boolean) => void;
   getOnHand: (locationId: string, productId: string) => number;
   getSeats: (eventId: string) => number;
+  isHidden: (locationId: string, productId: string) => boolean;
+  setHidden: (locationId: string, productId: string, hidden: boolean) => void;
   setOnHand: (
     locationId: string,
     productId: string,
@@ -59,9 +64,13 @@ type InventoryState = {
     items: Pick<CartItem, "productId" | "quantity">[],
     orderId: string,
   ) => void;
-  bookSeats: (eventId: string, qty: number) => boolean;
+  bookSeats: (eventId: string, qty: number) => Promise<boolean>;
   resetToCatalog: (locationId?: string) => void;
-  syncFromServer: (stocks: Record<string, number>, seats: Record<string, number>) => void;
+  syncFromServer: (
+    stocks: Record<string, number>,
+    seats: Record<string, number>,
+    hidden?: Record<string, boolean>,
+  ) => void;
 };
 
 function nextLedgerId() {
@@ -85,6 +94,7 @@ export const useInventoryStore = create<InventoryState>()(
     (set, get) => ({
       stocks: seedBottleStocks(),
       seats: seedEventSeats(),
+      hidden: {},
       ledger: [],
       revision: 0,
       hydrated: false,
@@ -99,6 +109,29 @@ export const useInventoryStore = create<InventoryState>()(
         const live = get().seats[eventId];
         if (typeof live === "number") return Math.max(0, live);
         return seedEventSeats()[eventId] ?? 0;
+      },
+      isHidden: (locationId, productId) => {
+        return Boolean(get().hidden[stockKey(locationId, productId)]);
+      },
+      setHidden: (locationId, productId, hidden) => {
+        const key = stockKey(locationId, productId);
+        set((s) => ({
+          hidden: { ...s.hidden, [key]: hidden },
+          revision: s.revision + 1,
+        }));
+        if (isDbConnected()) {
+          void apiSetProductVisibility(locationId, productId, hidden)
+            .then((res) => {
+              if (res.inventory) {
+                get().syncFromServer(
+                  res.inventory.stocks,
+                  res.inventory.seats,
+                  res.inventory.hidden,
+                );
+              }
+            })
+            .catch(console.error);
+        }
       },
       setOnHand: (locationId, productId, quantity, reason = "adjustment") => {
         const nextQty = Math.max(0, Math.floor(quantity));
@@ -220,23 +253,28 @@ export const useInventoryStore = create<InventoryState>()(
           }
         }
       },
-      bookSeats: (eventId, qty) => {
+      bookSeats: async (eventId, qty) => {
         const available = get().getSeats(eventId);
         if (qty <= 0 || qty > available) return false;
         set((s) => ({
           seats: { ...s.seats, [eventId]: available - qty },
           revision: s.revision + 1,
         }));
-        if (isDbConnected()) {
-          void apiBookSeats(eventId, qty)
-            .then((res) => {
-              if (res.inventory) {
-                get().syncFromServer(res.inventory.stocks, res.inventory.seats);
-              }
-            })
-            .catch(console.error);
+        if (!isDbConnected()) return true;
+        try {
+          const res = await apiBookSeats(eventId, qty);
+          if (res.inventory) {
+            get().syncFromServer(res.inventory.stocks, res.inventory.seats, res.inventory.hidden);
+          }
+          return true;
+        } catch (error) {
+          set((s) => ({
+            seats: { ...s.seats, [eventId]: (s.seats[eventId] ?? 0) + qty },
+            revision: s.revision + 1,
+          }));
+          console.error(error);
+          return false;
         }
-        return true;
       },
       resetToCatalog: (locationId) => {
         const seed = seedBottleStocks();
@@ -287,25 +325,27 @@ export const useInventoryStore = create<InventoryState>()(
         if (isDbConnected()) {
           void apiResetInventory(locationId)
             .then((res) => {
-              get().syncFromServer(res.inventory.stocks, res.inventory.seats);
+              get().syncFromServer(res.inventory.stocks, res.inventory.seats, res.inventory.hidden);
             })
             .catch(console.error);
         }
       },
-      syncFromServer: (stocks, seats) => {
+      syncFromServer: (stocks, seats, hidden) => {
         set({
           stocks: { ...seedBottleStocks(), ...stocks },
           seats: { ...seedEventSeats(), ...seats },
+          hidden: hidden !== undefined ? hidden : get().hidden,
           revision: get().revision + 1,
           hydrated: true,
         });
       },
     }),
     {
-      name: "sams-inventory-v2",
+      name: "sams-inventory-v3",
       partialize: (s) => ({
         stocks: s.stocks,
         seats: s.seats,
+        hidden: s.hidden,
         ledger: s.ledger,
       }),
       merge: (persisted, current) => {
@@ -315,6 +355,7 @@ export const useInventoryStore = create<InventoryState>()(
           ...saved,
           stocks: mergeSeedStocks(saved?.stocks, seedBottleStocks()),
           seats: mergeSeedStocks(saved?.seats, seedEventSeats()),
+          hidden: saved?.hidden ?? current.hidden,
           ledger: saved?.ledger ?? current.ledger,
         };
       },

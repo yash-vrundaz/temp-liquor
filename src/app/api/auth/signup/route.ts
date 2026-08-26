@@ -1,7 +1,7 @@
 import { NextResponse } from "next/server";
 import { signupCustomer } from "@/lib/db/users";
 import { signupSchema } from "@/lib/db/validators";
-import { writeSessionCookie } from "@/lib/auth/session";
+import { applyAuthCookies, issueTokens } from "@/lib/auth/session";
 import { validatePassword } from "@/lib/auth/password";
 import { clientIp, rateLimit, tooManyRequests } from "@/lib/rate-limit";
 
@@ -24,8 +24,18 @@ export async function POST(request: Request) {
       return NextResponse.json({ error: result.error }, { status: result.status });
     }
     const user = result.user;
-    const res = NextResponse.json({ user });
-    return writeSessionCookie(res, { sub: user.id, email: user.email, role: user.role });
+    const tokens = await issueTokens({
+      sub: user.id,
+      email: user.email,
+      role: user.role,
+    });
+    const res = NextResponse.json({
+      user,
+      accessToken: tokens.accessToken,
+      tokenType: tokens.tokenType,
+      expiresIn: tokens.expiresIn,
+    });
+    return applyAuthCookies(res, tokens);
   } catch (error) {
     console.error("[POST /api/auth/signup]", error);
     return NextResponse.json({ error: "Sign up failed." }, { status: 500 });
