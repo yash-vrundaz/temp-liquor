@@ -1,4 +1,5 @@
-import { prisma, isDbConfigured } from "@/lib/db/prisma";
+import { isDbConfigured } from "@/lib/db/prisma";
+import { addColumnIfMissing } from "@/lib/db/schema-guard";
 
 let inventoryVisibilitySchemaReady = false;
 
@@ -9,13 +10,12 @@ let inventoryVisibilitySchemaReady = false;
  * `location.findMany({ include: { inventory: true } })`), because Prisma selects
  * every column in the schema and errors with P2022 when one is missing.
  *
- * Always call this outside `$transaction` — the ALTER needs ACCESS EXCLUSIVE and
- * would block behind locks held by an open transaction on the same table.
+ * Always call this outside `$transaction`. MySQL commits the surrounding
+ * transaction implicitly when it runs DDL, which would silently split a
+ * multi-statement unit of work in half.
  */
 export async function ensureInventoryVisibilityColumn() {
   if (!isDbConfigured() || inventoryVisibilitySchemaReady) return;
-  await prisma.$executeRawUnsafe(
-    `ALTER TABLE location_inventory ADD COLUMN IF NOT EXISTS hidden BOOLEAN NOT NULL DEFAULT false`,
-  );
+  await addColumnIfMissing("location_inventory", "hidden", "BOOLEAN NOT NULL DEFAULT false");
   inventoryVisibilitySchemaReady = true;
 }

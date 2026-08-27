@@ -162,9 +162,8 @@ async function seedLocations() {
 }
 
 async function seedEvents() {
-  await prisma.$executeRawUnsafe(
-    `ALTER TABLE events ADD COLUMN IF NOT EXISTS active BOOLEAN NOT NULL DEFAULT true`,
-  );
+  // `events.active` is created by prisma/migrations/0_init, which `db:setup`
+  // applies before this seed runs — no ad-hoc ALTER needed.
   for (const e of events) {
     const row = {
       slug: e.slug,
@@ -186,7 +185,7 @@ async function seedEvents() {
       update: row,
     });
     await prisma.$executeRawUnsafe(
-      `UPDATE events SET active = $1 WHERE id = $2`,
+      `UPDATE events SET active = ? WHERE id = ?`,
       e.active !== false,
       e.id,
     );

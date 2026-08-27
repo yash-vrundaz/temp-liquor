@@ -2,6 +2,7 @@ import { ensureLocationPricingSchema, mapLocationPricing } from "@/lib/db/locati
 import { ensureInventoryVisibilityColumn } from "@/lib/db/inventory-visibility";
 import { DEFAULT_FULFILLMENT_PRICING } from "@/lib/fulfillment-pricing";
 import { prisma, isDbConfigured } from "@/lib/db/prisma";
+import { addColumnIfMissing } from "@/lib/db/schema-guard";
 import { mapEvent, mapLocation } from "@/lib/db/mappers";
 import { recordActivity } from "@/lib/db/activity";
 import { hasPermission } from "@/lib/auth/permissions";
@@ -21,9 +22,7 @@ let eventSchemaReady = false;
 /** Ensures events.active exists for older databases without a full migrate. */
 export async function ensureEventSchema() {
   if (!isDbConfigured() || eventSchemaReady) return;
-  await prisma.$executeRawUnsafe(
-    `ALTER TABLE events ADD COLUMN IF NOT EXISTS active BOOLEAN NOT NULL DEFAULT true`,
-  );
+  await addColumnIfMissing("events", "active", "BOOLEAN NOT NULL DEFAULT true");
   eventSchemaReady = true;
 }
 
