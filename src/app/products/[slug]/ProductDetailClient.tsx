@@ -13,6 +13,7 @@ import { useWishlistStore } from "@/store/wishlist";
 import { useUserStore } from "@/store/user";
 import { useBranchStore } from "@/store/branch";
 import { useInventoryStore } from "@/store/inventory";
+import { useLiveOnHand } from "@/hooks/useHydratedInventory";
 import { getLocationById, getPriceForLocation } from "@/data/locations";
 import { LOW_STOCK_THRESHOLD } from "@/lib/inventory";
 import { maxStockAnywhere } from "@/lib/cart-availability";
@@ -45,9 +46,7 @@ export function ProductDetailPage() {
   const wished = useWishlistStore((s) => (product ? s.ids.includes(product.id) : false));
   const addViewed = useUserStore((s) => s.addViewed);
   const branchId = useBranchStore((s) => s.branchId);
-  const onHand = useInventoryStore((s) =>
-    product ? s.getOnHand(branchId, product.id) : 0,
-  );
+  const onHand = useLiveOnHand(branchId, product?.id ?? "");
   const hiddenHere = useInventoryStore((s) =>
     product ? s.isHidden(branchId, product.id) : false,
   );

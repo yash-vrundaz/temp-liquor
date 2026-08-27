@@ -21,17 +21,24 @@ function publicSnapshot(): EventItem[] {
   return publicCache;
 }
 
+let allCacheRev = -1;
+let allCache: EventItem[] = getAllEvents();
+
 function allSnapshot(): EventItem[] {
-  void getRuntimeCatalogRevision();
-  return getAllEvents();
+  const rev = getRuntimeCatalogRevision();
+  if (rev !== allCacheRev) {
+    allCacheRev = rev;
+    allCache = getAllEvents();
+  }
+  return allCache;
 }
 
 /** All events (dashboard) — updates after bootstrap / add / hide / remove. */
 export function useRuntimeEvents() {
-  return useSyncExternalStore(subscribeRuntimeCatalog, allSnapshot, getAllEvents);
+  return useSyncExternalStore(subscribeRuntimeCatalog, allSnapshot, allSnapshot);
 }
 
 /** Active events only (public site). */
 export function usePublicEvents() {
-  return useSyncExternalStore(subscribeRuntimeCatalog, publicSnapshot, getPublicEvents);
+  return useSyncExternalStore(subscribeRuntimeCatalog, publicSnapshot, publicSnapshot);
 }

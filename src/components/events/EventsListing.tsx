@@ -13,11 +13,21 @@ import { formatPrice } from "@/lib/utils";
 import { SectionHeading } from "@/components/ui/SectionHeading";
 import { EventSeatCount } from "@/components/events/EventSeatCount";
 
+const SERVER_CATALOG_LOADED = false;
+
+function catalogLoadedSnapshot() {
+  return isRuntimeDataLoaded();
+}
+
+function serverCatalogLoadedSnapshot() {
+  return SERVER_CATALOG_LOADED;
+}
+
 function useCatalogLoaded() {
   return useSyncExternalStore(
     subscribeRuntimeCatalog,
-    isRuntimeDataLoaded,
-    () => false,
+    catalogLoadedSnapshot,
+    serverCatalogLoadedSnapshot,
   );
 }
 

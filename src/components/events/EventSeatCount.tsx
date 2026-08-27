@@ -1,6 +1,6 @@
 "use client";
 
-import { useInventoryStore } from "@/store/inventory";
+import { useLiveSeats } from "@/hooks/useHydratedInventory";
 
 export function EventSeatCount({
   eventId,
@@ -9,7 +9,7 @@ export function EventSeatCount({
   eventId: string;
   seatsTotal: number;
 }) {
-  const seats = useInventoryStore((s) => s.getSeats(eventId));
+  const seats = useLiveSeats(eventId);
   return (
     <>
       {seats}/{seatsTotal} seats
