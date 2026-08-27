@@ -24,8 +24,9 @@ append `?schema=public` — that is Postgres-only syntax and MySQL will reject t
 2. Create the `liquorshop` database in phpMyAdmin if it does not exist. Use
    collation `utf8mb4_unicode_ci` to match what the migration expects.
 
-   On shared hosting, Prisma connects over TCP 3306 rather than through
-   phpMyAdmin itself, so whitelist your IP under **cPanel → Remote MySQL** first.
+   Prisma connects over TCP 3306 rather than through phpMyAdmin itself. To
+   reach the database from outside the hosting account, add your IP under
+   **hPanel → Databases → Remote MySQL** first.
 
 3. Install, push the schema, and seed catalog data:
 
