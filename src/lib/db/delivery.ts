@@ -3,40 +3,43 @@ import { prisma, isDbConfigured } from "@/lib/db/prisma";
 import { drivers as seedDrivers } from "@/data/drivers";
 import { recordActivity } from "@/lib/db/activity";
 import { accessibleLocations, hasAllLocationAccess } from "@/lib/auth/location-access";
+import { addColumnIfMissing } from "@/lib/db/schema-guard";
 import type { UserProfile } from "@/types";
 
 let ready = false;
 
 export async function ensureDeliverySchema() {
   if (!isDbConfigured() || ready) return;
+  // MySQL cannot index a TEXT primary key without a prefix length, so ids are
+  // VARCHAR(191) here to match what Prisma's migration creates.
   await prisma.$executeRawUnsafe(`
     CREATE TABLE IF NOT EXISTS drivers (
-      id TEXT PRIMARY KEY,
-      name TEXT NOT NULL,
-      phone TEXT NOT NULL,
-      email TEXT,
-      vehicle TEXT NOT NULL,
-      location_id TEXT NOT NULL,
-      status TEXT NOT NULL DEFAULT 'available',
+      id VARCHAR(191) NOT NULL PRIMARY KEY,
+      name VARCHAR(191) NOT NULL,
+      phone VARCHAR(191) NOT NULL,
+      email VARCHAR(191),
+      vehicle VARCHAR(191) NOT NULL,
+      location_id VARCHAR(191) NOT NULL,
+      status VARCHAR(191) NOT NULL DEFAULT 'available',
       active BOOLEAN NOT NULL DEFAULT true,
-      photo_url TEXT
-    )
+      photo_url VARCHAR(512)
+    ) DEFAULT CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci
   `);
-  await prisma.$executeRawUnsafe(`ALTER TABLE orders ADD COLUMN IF NOT EXISTS driver_id TEXT`);
-  await prisma.$executeRawUnsafe(`ALTER TABLE orders ADD COLUMN IF NOT EXISTS delivery_status TEXT`);
-  await prisma.$executeRawUnsafe(`ALTER TABLE orders ADD COLUMN IF NOT EXISTS delivery_phone TEXT`);
-  await prisma.$executeRawUnsafe(`ALTER TABLE orders ADD COLUMN IF NOT EXISTS delivery_address JSONB`);
+  await addColumnIfMissing("orders", "driver_id", "VARCHAR(191) NULL");
+  await addColumnIfMissing("orders", "delivery_status", "VARCHAR(191) NULL");
+  await addColumnIfMissing("orders", "delivery_phone", "VARCHAR(191) NULL");
+  await addColumnIfMissing("orders", "delivery_address", "JSON NULL");
   for (const driver of seedDrivers) {
     await prisma.$executeRawUnsafe(
       `INSERT INTO drivers (id, name, phone, email, vehicle, location_id, status, active, photo_url)
-       VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9)
-       ON CONFLICT (id) DO UPDATE SET
-         name = EXCLUDED.name,
-         phone = EXCLUDED.phone,
-         email = EXCLUDED.email,
-         vehicle = EXCLUDED.vehicle,
-         location_id = EXCLUDED.location_id,
-         photo_url = EXCLUDED.photo_url`,
+       VALUES (?,?,?,?,?,?,?,?,?)
+       ON DUPLICATE KEY UPDATE
+         name = VALUES(name),
+         phone = VALUES(phone),
+         email = VALUES(email),
+         vehicle = VALUES(vehicle),
+         location_id = VALUES(location_id),
+         photo_url = VALUES(photo_url)`,
       driver.id,
       driver.name,
       driver.phone,
@@ -95,7 +98,7 @@ export async function listDrivers(locationId?: string) {
   await ensureDeliverySchema();
   const rows = locationId
     ? await prisma.$queryRawUnsafe<Parameters<typeof asDriver>[0][]>(
-        `SELECT * FROM drivers WHERE active = true AND location_id = $1 ORDER BY name`,
+        `SELECT * FROM drivers WHERE active = true AND location_id = ? ORDER BY name`,
         locationId,
       )
     : await prisma.$queryRawUnsafe<Parameters<typeof asDriver>[0][]>(
@@ -109,10 +112,10 @@ export async function saveOrderDelivery(orderId: string, delivery: DeliveryAddre
   await ensureDeliverySchema();
   await prisma.$executeRawUnsafe(
     `UPDATE orders
-     SET delivery_address = $1::jsonb,
-         delivery_phone = $2,
+     SET delivery_address = CAST(? AS JSON),
+         delivery_phone = ?,
          delivery_status = COALESCE(delivery_status, 'unassigned')
-     WHERE id = $3`,
+     WHERE id = ?`,
     JSON.stringify(delivery),
     delivery.phone,
     orderId,
@@ -194,7 +197,7 @@ export async function listDeliveryOrders(actor: UserProfile) {
            FROM orders o
            LEFT JOIN drivers d ON d.id = o.driver_id
            WHERE o.fulfillment = 'delivery' AND o.status <> 'cancelled'
-             AND o.location_id IN (${ids.map((_, i) => `$${i + 1}`).join(",")})
+             AND o.location_id IN (${ids.map(() => "?").join(",")})
            ORDER BY o.created_at DESC
            LIMIT 80`,
           ...ids,
@@ -223,7 +226,7 @@ export async function assignDriver(orderId: string, driverId: string, actorUserI
   const orderRows = await prisma.$queryRawUnsafe<
     { id: string; fulfillment: string; location_id: string; status: string }[]
   >(
-    `SELECT id, fulfillment, location_id, status FROM orders WHERE id = $1 LIMIT 1`,
+    `SELECT id, fulfillment, location_id, status FROM orders WHERE id = ? LIMIT 1`,
     orderId,
   );
   const order = orderRows[0];
@@ -234,7 +237,7 @@ export async function assignDriver(orderId: string, driverId: string, actorUserI
   }
 
   const driverRows = await prisma.$queryRawUnsafe<Parameters<typeof asDriver>[0][]>(
-    `SELECT * FROM drivers WHERE id = $1 AND active = true LIMIT 1`,
+    `SELECT * FROM drivers WHERE id = ? AND active = true LIMIT 1`,
     driverId,
   );
   const driver = driverRows[0] ? asDriver(driverRows[0]) : null;
@@ -244,12 +247,12 @@ export async function assignDriver(orderId: string, driverId: string, actorUserI
   }
 
   await prisma.$executeRawUnsafe(
-    `UPDATE orders SET driver_id = $1, delivery_status = 'assigned', status = 'shipped' WHERE id = $2`,
+    `UPDATE orders SET driver_id = ?, delivery_status = 'assigned', status = 'shipped' WHERE id = ?`,
     driverId,
     orderId,
   );
   await prisma.$executeRawUnsafe(
-    `UPDATE drivers SET status = 'on_route' WHERE id = $1`,
+    `UPDATE drivers SET status = 'on_route' WHERE id = ?`,
     driverId,
   );
   await recordActivity({
@@ -273,7 +276,7 @@ export async function updateDeliveryStatus(
   const orderStatus =
     status === "delivered" ? "delivered" : status === "unassigned" ? "processing" : "shipped";
   await prisma.$executeRawUnsafe(
-    `UPDATE orders SET delivery_status = $1, status = $2 WHERE id = $3`,
+    `UPDATE orders SET delivery_status = ?, status = ? WHERE id = ?`,
     status,
     orderStatus,
     orderId,
@@ -281,12 +284,12 @@ export async function updateDeliveryStatus(
   if (status === "delivered" || status === "unassigned") {
     await prisma.$executeRawUnsafe(
       `UPDATE drivers SET status = 'available'
-       WHERE id = (SELECT driver_id FROM orders WHERE id = $1)`,
+       WHERE id = (SELECT driver_id FROM orders WHERE id = ?)`,
       orderId,
     );
   }
   if (status === "unassigned") {
-    await prisma.$executeRawUnsafe(`UPDATE orders SET driver_id = NULL WHERE id = $1`, orderId);
+    await prisma.$executeRawUnsafe(`UPDATE orders SET driver_id = NULL WHERE id = ?`, orderId);
   }
   await recordActivity({
     actorUserId,
@@ -308,7 +311,7 @@ export async function hydrateOrderDelivery(order: Order): Promise<Order> {
             d.photo_url AS driver_photo, d.location_id AS driver_location, d.status AS driver_status
      FROM orders o
      LEFT JOIN drivers d ON d.id = o.driver_id
-     WHERE o.id = $1
+     WHERE o.id = ?
      LIMIT 1`,
     order.id,
   );

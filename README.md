@@ -1,24 +1,32 @@
 # Sam's Discount Liquor — Premium AR Liquor Store
 
-Next.js 15 storefront with a PostgreSQL backend: cinematic landing, 3D virtual showroom (React Three Fiber), AR product viewing, branch-aware inventory, cart/checkout, loyalty dashboard, events, and luxury UI.
+Next.js 15 storefront with a MySQL/MariaDB backend: cinematic landing, 3D virtual showroom (React Three Fiber), AR product viewing, branch-aware inventory, cart/checkout, loyalty dashboard, events, and luxury UI.
 
 ## Stack
 
 - Next.js 15 (App Router) · React 19 · TypeScript · Tailwind CSS 4
-- PostgreSQL · Prisma 6 · Next.js Route Handlers
+- MySQL 8 / MariaDB 10.4+ (phpMyAdmin) · Prisma 6 · Next.js Route Handlers
 - Framer Motion · GSAP · Three.js · R3F · Drei
 - Zustand · TanStack Query · Fuse.js · Zod · Lucide
 
 ## Setup
 
-1. Copy `.env.example` to `.env` and set your pgAdmin credentials:
+1. Copy `.env.example` to `.env` and set your MySQL credentials:
 
 ```env
-DATABASE_URL="postgresql://USER:PASSWORD@localhost:5432/liquorshop?schema=public"
+DATABASE_URL="mysql://USER:PASSWORD@localhost:3306/liquorshop"
 AUTH_SECRET="replace-with-a-long-random-string"
 ```
 
-2. Create the `liquorshop` database in pgAdmin if it does not exist.
+URL-encode special characters in the password (`@` → `%40`, `#` → `%23`). Do not
+append `?schema=public` — that is Postgres-only syntax and MySQL will reject the URL.
+
+2. Create the `liquorshop` database in phpMyAdmin if it does not exist. Use
+   collation `utf8mb4_unicode_ci` to match what the migration expects.
+
+   Prisma connects over TCP 3306 rather than through phpMyAdmin itself. To
+   reach the database from outside the hosting account, add your IP under
+   **hPanel → Databases → Remote MySQL** first.
 
 3. Install, push the schema, and seed catalog data:
 

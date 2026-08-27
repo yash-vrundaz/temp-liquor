@@ -127,11 +127,13 @@ export async function fetchActivityLogs(filters: {
     ...(createdAt ? { createdAt } : {}),
     ...(filters.q
       ? {
+          // No `mode: "insensitive"` on MySQL — the utf8mb4_unicode_ci column
+          // collation already makes `contains` case-insensitive.
           OR: [
-            { summary: { contains: filters.q, mode: "insensitive" } },
-            { actorName: { contains: filters.q, mode: "insensitive" } },
-            { actorEmail: { contains: filters.q, mode: "insensitive" } },
-            { entityId: { contains: filters.q, mode: "insensitive" } },
+            { summary: { contains: filters.q } },
+            { actorName: { contains: filters.q } },
+            { actorEmail: { contains: filters.q } },
+            { entityId: { contains: filters.q } },
           ],
         }
       : {}),

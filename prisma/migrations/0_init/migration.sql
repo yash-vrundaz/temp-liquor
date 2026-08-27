@@ -1,372 +1,313 @@
--- CreateSchema
-CREATE SCHEMA IF NOT EXISTS "public";
+-- CreateTable
+CREATE TABLE `categories` (
+    `slug` VARCHAR(191) NOT NULL,
+    `name` VARCHAR(191) NOT NULL,
+    `tagline` VARCHAR(191) NOT NULL,
+    `description` VARCHAR(191) NOT NULL,
+    `color` VARCHAR(191) NOT NULL,
+
+    PRIMARY KEY (`slug`)
+) DEFAULT CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci;
 
 -- CreateTable
-CREATE TABLE "categories" (
-    "slug" TEXT NOT NULL,
-    "name" TEXT NOT NULL,
-    "tagline" TEXT NOT NULL,
-    "description" TEXT NOT NULL,
-    "color" TEXT NOT NULL,
+CREATE TABLE `products` (
+    `id` VARCHAR(191) NOT NULL,
+    `slug` VARCHAR(191) NOT NULL,
+    `name` VARCHAR(191) NOT NULL,
+    `brand` VARCHAR(191) NOT NULL,
+    `category_slug` VARCHAR(191) NOT NULL,
+    `subcategory` VARCHAR(191) NULL,
+    `description` TEXT NOT NULL,
+    `brand_story` TEXT NOT NULL,
+    `origin` VARCHAR(191) NOT NULL,
+    `country` VARCHAR(191) NOT NULL,
+    `abv` DOUBLE NOT NULL,
+    `volume_ml` INTEGER NOT NULL,
+    `price` DOUBLE NOT NULL,
+    `compare_at_price` DOUBLE NULL,
+    `rating` DOUBLE NOT NULL,
+    `review_count` INTEGER NOT NULL,
+    `tasting_notes` JSON NOT NULL,
+    `food_pairings` JSON NOT NULL,
+    `cocktails` JSON NOT NULL,
+    `images` JSON NOT NULL,
+    `color` VARCHAR(191) NOT NULL,
+    `accent_color` VARCHAR(191) NOT NULL,
+    `label_color` VARCHAR(191) NOT NULL,
+    `bottle_height` DOUBLE NOT NULL,
+    `is_premium` BOOLEAN NOT NULL,
+    `is_imported` BOOLEAN NOT NULL,
+    `tags` JSON NOT NULL,
+    `nutrition` JSON NULL,
+    `glb_url` VARCHAR(512) NULL,
+    `usdz_url` VARCHAR(512) NULL,
+    `is_custom` BOOLEAN NOT NULL DEFAULT false,
+    `created_at` DATETIME(3) NOT NULL DEFAULT CURRENT_TIMESTAMP(3),
+    `updated_at` DATETIME(3) NOT NULL DEFAULT CURRENT_TIMESTAMP(3),
 
-    CONSTRAINT "categories_pkey" PRIMARY KEY ("slug")
-);
-
--- CreateTable
-CREATE TABLE "products" (
-    "id" TEXT NOT NULL,
-    "slug" TEXT NOT NULL,
-    "name" TEXT NOT NULL,
-    "brand" TEXT NOT NULL,
-    "category_slug" TEXT NOT NULL,
-    "subcategory" TEXT,
-    "description" TEXT NOT NULL,
-    "brand_story" TEXT NOT NULL,
-    "origin" TEXT NOT NULL,
-    "country" TEXT NOT NULL,
-    "abv" DOUBLE PRECISION NOT NULL,
-    "volume_ml" INTEGER NOT NULL,
-    "price" DOUBLE PRECISION NOT NULL,
-    "compare_at_price" DOUBLE PRECISION,
-    "rating" DOUBLE PRECISION NOT NULL,
-    "review_count" INTEGER NOT NULL,
-    "tasting_notes" JSONB NOT NULL,
-    "food_pairings" JSONB NOT NULL,
-    "cocktails" JSONB NOT NULL,
-    "images" JSONB NOT NULL,
-    "color" TEXT NOT NULL,
-    "accent_color" TEXT NOT NULL,
-    "label_color" TEXT NOT NULL,
-    "bottle_height" DOUBLE PRECISION NOT NULL,
-    "is_premium" BOOLEAN NOT NULL,
-    "is_imported" BOOLEAN NOT NULL,
-    "tags" JSONB NOT NULL,
-    "nutrition" JSONB,
-    "glb_url" TEXT,
-    "usdz_url" TEXT,
-    "is_custom" BOOLEAN NOT NULL DEFAULT false,
-    "created_at" TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP,
-    "updated_at" TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP,
-
-    CONSTRAINT "products_pkey" PRIMARY KEY ("id")
-);
+    UNIQUE INDEX `products_slug_key`(`slug`),
+    INDEX `products_category_slug_idx`(`category_slug`),
+    INDEX `products_brand_idx`(`brand`),
+    PRIMARY KEY (`id`)
+) DEFAULT CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci;
 
 -- CreateTable
-CREATE TABLE "locations" (
-    "id" TEXT NOT NULL,
-    "slug" TEXT NOT NULL,
-    "name" TEXT NOT NULL,
-    "short_name" TEXT NOT NULL,
-    "address" TEXT NOT NULL,
-    "city" TEXT NOT NULL,
-    "state" TEXT NOT NULL,
-    "zip" TEXT NOT NULL,
-    "phone" TEXT NOT NULL,
-    "email" TEXT NOT NULL,
-    "hours" JSONB NOT NULL,
-    "lat" DOUBLE PRECISION NOT NULL,
-    "lng" DOUBLE PRECISION NOT NULL,
-    "hero_image" TEXT NOT NULL,
-    "gallery" JSONB NOT NULL,
-    "staff" JSONB NOT NULL,
-    "services" JSONB NOT NULL,
-    "parking" TEXT NOT NULL,
-    "pickup_available" BOOLEAN NOT NULL,
-    "delivery_available" BOOLEAN NOT NULL DEFAULT true,
-    "delivery_radius_km" DOUBLE PRECISION NOT NULL,
-    "delivery_fee" DOUBLE PRECISION NOT NULL DEFAULT 12.5,
-    "delivery_free_minimum" DOUBLE PRECISION NOT NULL DEFAULT 150,
-    "tax_rate" DOUBLE PRECISION NOT NULL DEFAULT 0.08875,
-    "featured_offers" JSONB NOT NULL,
-    "description" TEXT NOT NULL,
+CREATE TABLE `locations` (
+    `id` VARCHAR(191) NOT NULL,
+    `slug` VARCHAR(191) NOT NULL,
+    `name` VARCHAR(191) NOT NULL,
+    `short_name` VARCHAR(191) NOT NULL,
+    `address` VARCHAR(191) NOT NULL,
+    `city` VARCHAR(191) NOT NULL,
+    `state` VARCHAR(191) NOT NULL,
+    `zip` VARCHAR(191) NOT NULL,
+    `phone` VARCHAR(191) NOT NULL,
+    `email` VARCHAR(191) NOT NULL,
+    `hours` JSON NOT NULL,
+    `lat` DOUBLE NOT NULL,
+    `lng` DOUBLE NOT NULL,
+    `hero_image` VARCHAR(512) NOT NULL,
+    `gallery` JSON NOT NULL,
+    `staff` JSON NOT NULL,
+    `services` JSON NOT NULL,
+    `parking` VARCHAR(191) NOT NULL,
+    `pickup_available` BOOLEAN NOT NULL,
+    `delivery_available` BOOLEAN NOT NULL DEFAULT true,
+    `delivery_radius_km` DOUBLE NOT NULL,
+    `delivery_fee` DOUBLE NOT NULL DEFAULT 12.5,
+    `delivery_free_minimum` DOUBLE NOT NULL DEFAULT 150,
+    `tax_rate` DOUBLE NOT NULL DEFAULT 0.08875,
+    `featured_offers` JSON NOT NULL,
+    `description` TEXT NOT NULL,
 
-    CONSTRAINT "locations_pkey" PRIMARY KEY ("id")
-);
-
--- CreateTable
-CREATE TABLE "drivers" (
-    "id" TEXT NOT NULL,
-    "name" TEXT NOT NULL,
-    "phone" TEXT NOT NULL,
-    "email" TEXT,
-    "vehicle" TEXT NOT NULL,
-    "location_id" TEXT NOT NULL,
-    "status" TEXT NOT NULL DEFAULT 'available',
-    "active" BOOLEAN NOT NULL DEFAULT true,
-    "photo_url" TEXT,
-
-    CONSTRAINT "drivers_pkey" PRIMARY KEY ("id")
-);
+    UNIQUE INDEX `locations_slug_key`(`slug`),
+    PRIMARY KEY (`id`)
+) DEFAULT CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci;
 
 -- CreateTable
-CREATE TABLE "location_inventory" (
-    "location_id" TEXT NOT NULL,
-    "product_id" TEXT NOT NULL,
-    "seed_stock" INTEGER NOT NULL,
-    "on_hand" INTEGER NOT NULL,
-    "promo_price" DOUBLE PRECISION,
-    "featured" BOOLEAN NOT NULL DEFAULT false,
-    "hidden" BOOLEAN NOT NULL DEFAULT false,
+CREATE TABLE `drivers` (
+    `id` VARCHAR(191) NOT NULL,
+    `name` VARCHAR(191) NOT NULL,
+    `phone` VARCHAR(191) NOT NULL,
+    `email` VARCHAR(191) NULL,
+    `vehicle` VARCHAR(191) NOT NULL,
+    `location_id` VARCHAR(191) NOT NULL,
+    `status` VARCHAR(191) NOT NULL DEFAULT 'available',
+    `active` BOOLEAN NOT NULL DEFAULT true,
+    `photo_url` VARCHAR(512) NULL,
 
-    CONSTRAINT "location_inventory_pkey" PRIMARY KEY ("location_id","product_id")
-);
-
--- CreateTable
-CREATE TABLE "events" (
-    "id" TEXT NOT NULL,
-    "slug" TEXT NOT NULL,
-    "title" TEXT NOT NULL,
-    "type" TEXT NOT NULL,
-    "description" TEXT NOT NULL,
-    "location_id" TEXT NOT NULL,
-    "date" TEXT NOT NULL,
-    "start_time" TEXT NOT NULL,
-    "end_time" TEXT NOT NULL,
-    "price" DOUBLE PRECISION NOT NULL,
-    "seats_total" INTEGER NOT NULL,
-    "seats_available" INTEGER NOT NULL,
-    "image" TEXT NOT NULL,
-    "hosts" JSONB NOT NULL,
-    "active" BOOLEAN NOT NULL DEFAULT true,
-
-    CONSTRAINT "events_pkey" PRIMARY KEY ("id")
-);
+    INDEX `drivers_location_id_idx`(`location_id`),
+    INDEX `drivers_status_idx`(`status`),
+    PRIMARY KEY (`id`)
+) DEFAULT CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci;
 
 -- CreateTable
-CREATE TABLE "reviews" (
-    "id" TEXT NOT NULL,
-    "product_id" TEXT NOT NULL,
-    "user_name" TEXT NOT NULL,
-    "rating" INTEGER NOT NULL,
-    "title" TEXT NOT NULL,
-    "body" TEXT NOT NULL,
-    "date" TEXT NOT NULL,
-    "verified" BOOLEAN NOT NULL,
-    "images" JSONB,
-    "helpful" INTEGER NOT NULL,
+CREATE TABLE `location_inventory` (
+    `location_id` VARCHAR(191) NOT NULL,
+    `product_id` VARCHAR(191) NOT NULL,
+    `seed_stock` INTEGER NOT NULL,
+    `on_hand` INTEGER NOT NULL,
+    `promo_price` DOUBLE NULL,
+    `featured` BOOLEAN NOT NULL DEFAULT false,
+    `hidden` BOOLEAN NOT NULL DEFAULT false,
 
-    CONSTRAINT "reviews_pkey" PRIMARY KEY ("id")
-);
+    INDEX `location_inventory_product_id_idx`(`product_id`),
+    PRIMARY KEY (`location_id`, `product_id`)
+) DEFAULT CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci;
 
 -- CreateTable
-CREATE TABLE "users" (
-    "id" TEXT NOT NULL,
-    "email" TEXT NOT NULL,
-    "name" TEXT NOT NULL,
-    "role" TEXT NOT NULL,
-    "password_hash" TEXT,
-    "active" BOOLEAN NOT NULL DEFAULT true,
-    "preferred_branch_id" TEXT NOT NULL,
-    "loyalty_points" INTEGER NOT NULL,
-    "loyalty_tier" TEXT NOT NULL,
-    "addresses" JSONB NOT NULL,
-    "recently_viewed" JSONB NOT NULL,
-    "avatar_url" TEXT,
-    "permission_grants" JSONB NOT NULL DEFAULT '[]',
-    "permission_revokes" JSONB NOT NULL DEFAULT '[]',
-    "allowed_location_ids" JSONB,
-    "created_at" TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP,
-    "updated_at" TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP,
+CREATE TABLE `events` (
+    `id` VARCHAR(191) NOT NULL,
+    `slug` VARCHAR(191) NOT NULL,
+    `title` VARCHAR(191) NOT NULL,
+    `type` VARCHAR(191) NOT NULL,
+    `description` TEXT NOT NULL,
+    `location_id` VARCHAR(191) NOT NULL,
+    `date` VARCHAR(191) NOT NULL,
+    `start_time` VARCHAR(191) NOT NULL,
+    `end_time` VARCHAR(191) NOT NULL,
+    `price` DOUBLE NOT NULL,
+    `seats_total` INTEGER NOT NULL,
+    `seats_available` INTEGER NOT NULL,
+    `image` VARCHAR(512) NOT NULL,
+    `hosts` JSON NOT NULL,
+    `active` BOOLEAN NOT NULL DEFAULT true,
 
-    CONSTRAINT "users_pkey" PRIMARY KEY ("id")
-);
-
--- CreateTable
-CREATE TABLE "orders" (
-    "id" TEXT NOT NULL,
-    "user_id" TEXT NOT NULL,
-    "date" TEXT NOT NULL,
-    "status" TEXT NOT NULL,
-    "total" DOUBLE PRECISION NOT NULL,
-    "fulfillment" TEXT NOT NULL,
-    "location_id" TEXT NOT NULL,
-    "tracking" TEXT,
-    "driver_id" TEXT,
-    "delivery_status" TEXT,
-    "delivery_phone" TEXT,
-    "delivery_address" JSONB,
-    "created_at" TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP,
-
-    CONSTRAINT "orders_pkey" PRIMARY KEY ("id")
-);
+    UNIQUE INDEX `events_slug_key`(`slug`),
+    INDEX `events_location_id_idx`(`location_id`),
+    INDEX `events_active_idx`(`active`),
+    PRIMARY KEY (`id`)
+) DEFAULT CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci;
 
 -- CreateTable
-CREATE TABLE "order_items" (
-    "id" TEXT NOT NULL,
-    "order_id" TEXT NOT NULL,
-    "product_id" TEXT NOT NULL,
-    "quantity" INTEGER NOT NULL,
-    "price" DOUBLE PRECISION NOT NULL,
+CREATE TABLE `reviews` (
+    `id` VARCHAR(191) NOT NULL,
+    `product_id` VARCHAR(191) NOT NULL,
+    `user_name` VARCHAR(191) NOT NULL,
+    `rating` INTEGER NOT NULL,
+    `title` VARCHAR(191) NOT NULL,
+    `body` TEXT NOT NULL,
+    `date` VARCHAR(191) NOT NULL,
+    `verified` BOOLEAN NOT NULL,
+    `images` JSON NULL,
+    `helpful` INTEGER NOT NULL,
 
-    CONSTRAINT "order_items_pkey" PRIMARY KEY ("id")
-);
-
--- CreateTable
-CREATE TABLE "inventory_ledger" (
-    "id" TEXT NOT NULL,
-    "location_id" TEXT NOT NULL,
-    "product_id" TEXT NOT NULL,
-    "delta" INTEGER NOT NULL,
-    "on_hand_after" INTEGER NOT NULL,
-    "reason" TEXT NOT NULL,
-    "order_id" TEXT,
-    "created_at" TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP,
-
-    CONSTRAINT "inventory_ledger_pkey" PRIMARY KEY ("id")
-);
+    INDEX `reviews_product_id_idx`(`product_id`),
+    PRIMARY KEY (`id`)
+) DEFAULT CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci;
 
 -- CreateTable
-CREATE TABLE "activity_logs" (
-    "id" TEXT NOT NULL,
-    "actor_user_id" TEXT,
-    "actor_name" TEXT NOT NULL,
-    "actor_email" TEXT,
-    "actor_role" TEXT NOT NULL,
-    "action" TEXT NOT NULL,
-    "entity_type" TEXT NOT NULL,
-    "entity_id" TEXT,
-    "summary" TEXT NOT NULL,
-    "metadata" JSONB,
-    "location_id" TEXT,
-    "created_at" TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP,
+CREATE TABLE `users` (
+    `id` VARCHAR(191) NOT NULL,
+    `email` VARCHAR(191) NOT NULL,
+    `name` VARCHAR(191) NOT NULL,
+    `role` VARCHAR(191) NOT NULL,
+    `password_hash` VARCHAR(191) NULL,
+    `active` BOOLEAN NOT NULL DEFAULT true,
+    `preferred_branch_id` VARCHAR(191) NOT NULL,
+    `loyalty_points` INTEGER NOT NULL,
+    `loyalty_tier` VARCHAR(191) NOT NULL,
+    `addresses` JSON NOT NULL,
+    `recently_viewed` JSON NOT NULL,
+    `avatar_url` TEXT NULL,
+    `permission_grants` JSON NOT NULL,
+    `permission_revokes` JSON NOT NULL,
+    `allowed_location_ids` JSON NULL,
+    `created_at` DATETIME(3) NOT NULL DEFAULT CURRENT_TIMESTAMP(3),
+    `updated_at` DATETIME(3) NOT NULL DEFAULT CURRENT_TIMESTAMP(3),
 
-    CONSTRAINT "activity_logs_pkey" PRIMARY KEY ("id")
-);
+    UNIQUE INDEX `users_email_key`(`email`),
+    INDEX `users_role_idx`(`role`),
+    INDEX `users_active_idx`(`active`),
+    PRIMARY KEY (`id`)
+) DEFAULT CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci;
 
 -- CreateTable
-CREATE TABLE "role_definitions" (
-    "id" TEXT NOT NULL,
-    "slug" TEXT NOT NULL,
-    "label" TEXT NOT NULL,
-    "description" TEXT NOT NULL DEFAULT '',
-    "permissions" JSONB NOT NULL DEFAULT '[]',
-    "rank" INTEGER NOT NULL DEFAULT 1,
-    "created_at" TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP,
-    "updated_at" TIMESTAMP(3) NOT NULL,
+CREATE TABLE `orders` (
+    `id` VARCHAR(191) NOT NULL,
+    `user_id` VARCHAR(191) NOT NULL,
+    `date` VARCHAR(191) NOT NULL,
+    `status` VARCHAR(191) NOT NULL,
+    `total` DOUBLE NOT NULL,
+    `fulfillment` VARCHAR(191) NOT NULL,
+    `location_id` VARCHAR(191) NOT NULL,
+    `tracking` VARCHAR(191) NULL,
+    `driver_id` VARCHAR(191) NULL,
+    `delivery_status` VARCHAR(191) NULL,
+    `delivery_phone` VARCHAR(191) NULL,
+    `delivery_address` JSON NULL,
+    `created_at` DATETIME(3) NOT NULL DEFAULT CURRENT_TIMESTAMP(3),
 
-    CONSTRAINT "role_definitions_pkey" PRIMARY KEY ("id")
-);
+    INDEX `orders_user_id_idx`(`user_id`),
+    INDEX `orders_location_id_idx`(`location_id`),
+    INDEX `orders_date_idx`(`date`),
+    PRIMARY KEY (`id`)
+) DEFAULT CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci;
 
--- CreateIndex
-CREATE UNIQUE INDEX "products_slug_key" ON "products"("slug");
+-- CreateTable
+CREATE TABLE `order_items` (
+    `id` VARCHAR(191) NOT NULL,
+    `order_id` VARCHAR(191) NOT NULL,
+    `product_id` VARCHAR(191) NOT NULL,
+    `quantity` INTEGER NOT NULL,
+    `price` DOUBLE NOT NULL,
 
--- CreateIndex
-CREATE INDEX "products_category_slug_idx" ON "products"("category_slug");
+    INDEX `order_items_order_id_idx`(`order_id`),
+    INDEX `order_items_product_id_idx`(`product_id`),
+    PRIMARY KEY (`id`)
+) DEFAULT CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci;
 
--- CreateIndex
-CREATE INDEX "products_brand_idx" ON "products"("brand");
+-- CreateTable
+CREATE TABLE `inventory_ledger` (
+    `id` VARCHAR(191) NOT NULL,
+    `location_id` VARCHAR(191) NOT NULL,
+    `product_id` VARCHAR(191) NOT NULL,
+    `delta` INTEGER NOT NULL,
+    `on_hand_after` INTEGER NOT NULL,
+    `reason` VARCHAR(191) NOT NULL,
+    `order_id` VARCHAR(191) NULL,
+    `created_at` DATETIME(3) NOT NULL DEFAULT CURRENT_TIMESTAMP(3),
 
--- CreateIndex
-CREATE UNIQUE INDEX "locations_slug_key" ON "locations"("slug");
+    INDEX `inventory_ledger_location_id_product_id_idx`(`location_id`, `product_id`),
+    INDEX `inventory_ledger_order_id_idx`(`order_id`),
+    INDEX `inventory_ledger_created_at_idx`(`created_at`),
+    PRIMARY KEY (`id`)
+) DEFAULT CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci;
 
--- CreateIndex
-CREATE INDEX "drivers_location_id_idx" ON "drivers"("location_id");
+-- CreateTable
+CREATE TABLE `activity_logs` (
+    `id` VARCHAR(191) NOT NULL,
+    `actor_user_id` VARCHAR(191) NULL,
+    `actor_name` VARCHAR(191) NOT NULL,
+    `actor_email` VARCHAR(191) NULL,
+    `actor_role` VARCHAR(191) NOT NULL,
+    `action` VARCHAR(191) NOT NULL,
+    `entity_type` VARCHAR(191) NOT NULL,
+    `entity_id` VARCHAR(191) NULL,
+    `summary` VARCHAR(191) NOT NULL,
+    `metadata` JSON NULL,
+    `location_id` VARCHAR(191) NULL,
+    `created_at` DATETIME(3) NOT NULL DEFAULT CURRENT_TIMESTAMP(3),
 
--- CreateIndex
-CREATE INDEX "drivers_status_idx" ON "drivers"("status");
+    INDEX `activity_logs_created_at_idx`(`created_at`),
+    INDEX `activity_logs_actor_user_id_idx`(`actor_user_id`),
+    INDEX `activity_logs_action_idx`(`action`),
+    INDEX `activity_logs_entity_type_entity_id_idx`(`entity_type`, `entity_id`),
+    PRIMARY KEY (`id`)
+) DEFAULT CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci;
 
--- CreateIndex
-CREATE INDEX "location_inventory_product_id_idx" ON "location_inventory"("product_id");
+-- CreateTable
+CREATE TABLE `role_definitions` (
+    `id` VARCHAR(191) NOT NULL,
+    `slug` VARCHAR(191) NOT NULL,
+    `label` VARCHAR(191) NOT NULL,
+    `description` VARCHAR(1000) NOT NULL DEFAULT '',
+    `permissions` JSON NOT NULL,
+    `rank` INTEGER NOT NULL DEFAULT 1,
+    `created_at` DATETIME(3) NOT NULL DEFAULT CURRENT_TIMESTAMP(3),
+    `updated_at` DATETIME(3) NOT NULL,
 
--- CreateIndex
-CREATE UNIQUE INDEX "events_slug_key" ON "events"("slug");
-
--- CreateIndex
-CREATE INDEX "events_location_id_idx" ON "events"("location_id");
-
--- CreateIndex
-CREATE INDEX "events_active_idx" ON "events"("active");
-
--- CreateIndex
-CREATE INDEX "reviews_product_id_idx" ON "reviews"("product_id");
-
--- CreateIndex
-CREATE UNIQUE INDEX "users_email_key" ON "users"("email");
-
--- CreateIndex
-CREATE INDEX "users_role_idx" ON "users"("role");
-
--- CreateIndex
-CREATE INDEX "users_active_idx" ON "users"("active");
-
--- CreateIndex
-CREATE INDEX "orders_user_id_idx" ON "orders"("user_id");
-
--- CreateIndex
-CREATE INDEX "orders_location_id_idx" ON "orders"("location_id");
-
--- CreateIndex
-CREATE INDEX "orders_date_idx" ON "orders"("date");
-
--- CreateIndex
-CREATE INDEX "order_items_order_id_idx" ON "order_items"("order_id");
-
--- CreateIndex
-CREATE INDEX "order_items_product_id_idx" ON "order_items"("product_id");
-
--- CreateIndex
-CREATE INDEX "inventory_ledger_location_id_product_id_idx" ON "inventory_ledger"("location_id", "product_id");
-
--- CreateIndex
-CREATE INDEX "inventory_ledger_order_id_idx" ON "inventory_ledger"("order_id");
-
--- CreateIndex
-CREATE INDEX "inventory_ledger_created_at_idx" ON "inventory_ledger"("created_at");
-
--- CreateIndex
-CREATE INDEX "activity_logs_created_at_idx" ON "activity_logs"("created_at");
-
--- CreateIndex
-CREATE INDEX "activity_logs_actor_user_id_idx" ON "activity_logs"("actor_user_id");
-
--- CreateIndex
-CREATE INDEX "activity_logs_action_idx" ON "activity_logs"("action");
-
--- CreateIndex
-CREATE INDEX "activity_logs_entity_type_entity_id_idx" ON "activity_logs"("entity_type", "entity_id");
-
--- CreateIndex
-CREATE UNIQUE INDEX "role_definitions_slug_key" ON "role_definitions"("slug");
-
--- CreateIndex
-CREATE INDEX "role_definitions_rank_idx" ON "role_definitions"("rank");
+    UNIQUE INDEX `role_definitions_slug_key`(`slug`),
+    INDEX `role_definitions_rank_idx`(`rank`),
+    PRIMARY KEY (`id`)
+) DEFAULT CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci;
 
 -- AddForeignKey
-ALTER TABLE "products" ADD CONSTRAINT "products_category_slug_fkey" FOREIGN KEY ("category_slug") REFERENCES "categories"("slug") ON DELETE RESTRICT ON UPDATE CASCADE;
+ALTER TABLE `products` ADD CONSTRAINT `products_category_slug_fkey` FOREIGN KEY (`category_slug`) REFERENCES `categories`(`slug`) ON DELETE RESTRICT ON UPDATE CASCADE;
 
 -- AddForeignKey
-ALTER TABLE "drivers" ADD CONSTRAINT "drivers_location_id_fkey" FOREIGN KEY ("location_id") REFERENCES "locations"("id") ON DELETE CASCADE ON UPDATE CASCADE;
+ALTER TABLE `drivers` ADD CONSTRAINT `drivers_location_id_fkey` FOREIGN KEY (`location_id`) REFERENCES `locations`(`id`) ON DELETE CASCADE ON UPDATE CASCADE;
 
 -- AddForeignKey
-ALTER TABLE "location_inventory" ADD CONSTRAINT "location_inventory_location_id_fkey" FOREIGN KEY ("location_id") REFERENCES "locations"("id") ON DELETE CASCADE ON UPDATE CASCADE;
+ALTER TABLE `location_inventory` ADD CONSTRAINT `location_inventory_location_id_fkey` FOREIGN KEY (`location_id`) REFERENCES `locations`(`id`) ON DELETE CASCADE ON UPDATE CASCADE;
 
 -- AddForeignKey
-ALTER TABLE "location_inventory" ADD CONSTRAINT "location_inventory_product_id_fkey" FOREIGN KEY ("product_id") REFERENCES "products"("id") ON DELETE CASCADE ON UPDATE CASCADE;
+ALTER TABLE `location_inventory` ADD CONSTRAINT `location_inventory_product_id_fkey` FOREIGN KEY (`product_id`) REFERENCES `products`(`id`) ON DELETE CASCADE ON UPDATE CASCADE;
 
 -- AddForeignKey
-ALTER TABLE "events" ADD CONSTRAINT "events_location_id_fkey" FOREIGN KEY ("location_id") REFERENCES "locations"("id") ON DELETE CASCADE ON UPDATE CASCADE;
+ALTER TABLE `events` ADD CONSTRAINT `events_location_id_fkey` FOREIGN KEY (`location_id`) REFERENCES `locations`(`id`) ON DELETE CASCADE ON UPDATE CASCADE;
 
 -- AddForeignKey
-ALTER TABLE "reviews" ADD CONSTRAINT "reviews_product_id_fkey" FOREIGN KEY ("product_id") REFERENCES "products"("id") ON DELETE CASCADE ON UPDATE CASCADE;
+ALTER TABLE `reviews` ADD CONSTRAINT `reviews_product_id_fkey` FOREIGN KEY (`product_id`) REFERENCES `products`(`id`) ON DELETE CASCADE ON UPDATE CASCADE;
 
 -- AddForeignKey
-ALTER TABLE "orders" ADD CONSTRAINT "orders_user_id_fkey" FOREIGN KEY ("user_id") REFERENCES "users"("id") ON DELETE RESTRICT ON UPDATE CASCADE;
+ALTER TABLE `orders` ADD CONSTRAINT `orders_user_id_fkey` FOREIGN KEY (`user_id`) REFERENCES `users`(`id`) ON DELETE RESTRICT ON UPDATE CASCADE;
 
 -- AddForeignKey
-ALTER TABLE "orders" ADD CONSTRAINT "orders_location_id_fkey" FOREIGN KEY ("location_id") REFERENCES "locations"("id") ON DELETE RESTRICT ON UPDATE CASCADE;
+ALTER TABLE `orders` ADD CONSTRAINT `orders_location_id_fkey` FOREIGN KEY (`location_id`) REFERENCES `locations`(`id`) ON DELETE RESTRICT ON UPDATE CASCADE;
 
 -- AddForeignKey
-ALTER TABLE "orders" ADD CONSTRAINT "orders_driver_id_fkey" FOREIGN KEY ("driver_id") REFERENCES "drivers"("id") ON DELETE SET NULL ON UPDATE CASCADE;
+ALTER TABLE `orders` ADD CONSTRAINT `orders_driver_id_fkey` FOREIGN KEY (`driver_id`) REFERENCES `drivers`(`id`) ON DELETE SET NULL ON UPDATE CASCADE;
 
 -- AddForeignKey
-ALTER TABLE "order_items" ADD CONSTRAINT "order_items_order_id_fkey" FOREIGN KEY ("order_id") REFERENCES "orders"("id") ON DELETE CASCADE ON UPDATE CASCADE;
+ALTER TABLE `order_items` ADD CONSTRAINT `order_items_order_id_fkey` FOREIGN KEY (`order_id`) REFERENCES `orders`(`id`) ON DELETE CASCADE ON UPDATE CASCADE;
 
 -- AddForeignKey
-ALTER TABLE "order_items" ADD CONSTRAINT "order_items_product_id_fkey" FOREIGN KEY ("product_id") REFERENCES "products"("id") ON DELETE RESTRICT ON UPDATE CASCADE;
+ALTER TABLE `order_items` ADD CONSTRAINT `order_items_product_id_fkey` FOREIGN KEY (`product_id`) REFERENCES `products`(`id`) ON DELETE RESTRICT ON UPDATE CASCADE;
 
 -- AddForeignKey
-ALTER TABLE "inventory_ledger" ADD CONSTRAINT "inventory_ledger_order_id_fkey" FOREIGN KEY ("order_id") REFERENCES "orders"("id") ON DELETE SET NULL ON UPDATE CASCADE;
+ALTER TABLE `inventory_ledger` ADD CONSTRAINT `inventory_ledger_order_id_fkey` FOREIGN KEY (`order_id`) REFERENCES `orders`(`id`) ON DELETE SET NULL ON UPDATE CASCADE;
 
 -- AddForeignKey
-ALTER TABLE "activity_logs" ADD CONSTRAINT "activity_logs_actor_user_id_fkey" FOREIGN KEY ("actor_user_id") REFERENCES "users"("id") ON DELETE SET NULL ON UPDATE CASCADE;
+ALTER TABLE `activity_logs` ADD CONSTRAINT `activity_logs_actor_user_id_fkey` FOREIGN KEY (`actor_user_id`) REFERENCES `users`(`id`) ON DELETE SET NULL ON UPDATE CASCADE;
 

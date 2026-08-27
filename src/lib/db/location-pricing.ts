@@ -1,23 +1,16 @@
-import { prisma, isDbConfigured } from "@/lib/db/prisma";
+import { isDbConfigured } from "@/lib/db/prisma";
 import { DEFAULT_FULFILLMENT_PRICING } from "@/lib/fulfillment-pricing";
+import { addColumnIfMissing } from "@/lib/db/schema-guard";
 
 let locationPricingSchemaReady = false;
 
 /** Ensures delivery/pricing columns exist on older databases without a full migrate. */
 export async function ensureLocationPricingSchema() {
   if (!isDbConfigured() || locationPricingSchemaReady) return;
-  await prisma.$executeRawUnsafe(
-    `ALTER TABLE locations ADD COLUMN IF NOT EXISTS delivery_available BOOLEAN NOT NULL DEFAULT true`,
-  );
-  await prisma.$executeRawUnsafe(
-    `ALTER TABLE locations ADD COLUMN IF NOT EXISTS delivery_fee DOUBLE PRECISION NOT NULL DEFAULT 12.5`,
-  );
-  await prisma.$executeRawUnsafe(
-    `ALTER TABLE locations ADD COLUMN IF NOT EXISTS delivery_free_minimum DOUBLE PRECISION NOT NULL DEFAULT 150`,
-  );
-  await prisma.$executeRawUnsafe(
-    `ALTER TABLE locations ADD COLUMN IF NOT EXISTS tax_rate DOUBLE PRECISION NOT NULL DEFAULT 0.08875`,
-  );
+  await addColumnIfMissing("locations", "delivery_available", "BOOLEAN NOT NULL DEFAULT true");
+  await addColumnIfMissing("locations", "delivery_fee", "DOUBLE NOT NULL DEFAULT 12.5");
+  await addColumnIfMissing("locations", "delivery_free_minimum", "DOUBLE NOT NULL DEFAULT 150");
+  await addColumnIfMissing("locations", "tax_rate", "DOUBLE NOT NULL DEFAULT 0.08875");
   locationPricingSchemaReady = true;
 }
 
