@@ -10,7 +10,7 @@ import { useWishlistStore } from "@/store/wishlist";
 import { useCartStore } from "@/store/cart";
 import { addToCart } from "@/lib/add-to-cart";
 import { useBranchStore } from "@/store/branch";
-import { useInventoryStore } from "@/store/inventory";
+import { useLiveOnHand } from "@/hooks/useHydratedInventory";
 import { getLocationById, getPriceForLocation } from "@/data/locations";
 import { LOW_STOCK_THRESHOLD } from "@/lib/inventory";
 import { Button } from "@/components/ui/Button";
@@ -36,7 +36,7 @@ export function ProductCard({
   );
   const selectedBranch = useBranchStore((s) => s.branchId);
   const branchId = locationId ?? selectedBranch;
-  const onHand = useInventoryStore((s) => s.getOnHand(branchId, product.id));
+  const onHand = useLiveOnHand(branchId, product.id);
   const price = getPriceForLocation(branchId, product.id);
   const remaining = Math.max(0, onHand - cartQty);
   const outOfStock = onHand <= 0;

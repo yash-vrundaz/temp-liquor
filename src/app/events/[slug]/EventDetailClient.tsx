@@ -8,6 +8,7 @@ import { useRuntimeEvents } from "@/hooks/useRuntimeEvents";
 import { formatPrice } from "@/lib/utils";
 import { Button } from "@/components/ui/Button";
 import { Input } from "@/components/ui/Input";
+import { useLiveSeats } from "@/hooks/useHydratedInventory";
 import { useInventoryStore } from "@/store/inventory";
 
 export function EventDetailPage() {
@@ -21,9 +22,7 @@ export function EventDetailPage() {
   const [booked, setBooked] = useState(false);
   const [name, setName] = useState("");
   const [error, setError] = useState("");
-  const seatsAvailable = useInventoryStore((s) =>
-    event ? s.getSeats(event.id) : 0,
-  );
+  const seatsAvailable = useLiveSeats(event?.id ?? "");
   const [booking, setBooking] = useState(false);
   const bookSeats = useInventoryStore((s) => s.bookSeats);
 

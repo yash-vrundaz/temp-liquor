@@ -1,8 +1,12 @@
 "use client";
 
+import { useMemo } from "react";
 import { useBranchStore } from "@/store/branch";
 import { useInventoryStore } from "@/store/inventory";
+import { getCatalogStock } from "@/lib/inventory";
+import { getAllLocations } from "@/data/locations";
 import { stockByLocation } from "@/lib/cart-availability";
+import { useClientMounted } from "@/hooks/useHydratedInventory";
 import { cn } from "@/lib/utils";
 
 type Props = {
@@ -20,11 +24,20 @@ export function LocationStockStrip({
   className,
 }: Props) {
   const branchId = useBranchStore((s) => s.branchId);
+  const mounted = useClientMounted();
   const revision = useInventoryStore((s) => s.revision);
   const setBranch = useBranchStore((s) => s.setBranch);
   void revision;
 
-  const rows = stockByLocation(productId);
+  const rows = useMemo(() => {
+    if (!mounted) {
+      return getAllLocations().map((location) => ({
+        location,
+        stock: getCatalogStock(location.id, productId),
+      }));
+    }
+    return stockByLocation(productId);
+  }, [mounted, productId, revision]);
 
   return (
     <div className={cn("flex flex-wrap gap-1.5", className)}>

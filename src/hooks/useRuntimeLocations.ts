@@ -8,17 +8,19 @@ import {
 } from "@/lib/runtime-data";
 import type { StoreLocation } from "@/types";
 
-function getSnapshot(): StoreLocation[] {
-  // Revision is read so React re-renders when catalog mutates.
-  void getRuntimeCatalogRevision();
-  return getAllLocations();
-}
+let locationsCacheRev = -1;
+let locationsCache: StoreLocation[] = getAllLocations();
 
-function getServerSnapshot(): StoreLocation[] {
-  return getAllLocations();
+function locationsSnapshot(): StoreLocation[] {
+  const rev = getRuntimeCatalogRevision();
+  if (rev !== locationsCacheRev) {
+    locationsCacheRev = rev;
+    locationsCache = getAllLocations();
+  }
+  return locationsCache;
 }
 
 /** Live store list — updates when bootstrap loads or dashboard add/edit/remove runs. */
 export function useRuntimeLocations() {
-  return useSyncExternalStore(subscribeRuntimeCatalog, getSnapshot, getServerSnapshot);
+  return useSyncExternalStore(subscribeRuntimeCatalog, locationsSnapshot, locationsSnapshot);
 }
