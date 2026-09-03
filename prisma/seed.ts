@@ -271,16 +271,17 @@ async function seedOrders(userId: string, orders: Order[]) {
     const existingItems = await prisma.orderItem.findMany({
       where: { orderId: order.id },
     });
-    if (!existingItems.length) {
-      await prisma.orderItem.createMany({
-        data: order.items.map((item) => ({
-          orderId: order.id,
-          productId: item.productId,
-          quantity: item.quantity,
-          price: item.price,
-        })),
-      });
+    if (existingItems.length) {
+      await prisma.orderItem.deleteMany({ where: { orderId: order.id } });
     }
+    await prisma.orderItem.createMany({
+      data: order.items.map((item) => ({
+        orderId: order.id,
+        productId: item.productId,
+        quantity: item.quantity,
+        price: item.price,
+      })),
+    });
   }
 }
 
@@ -353,9 +354,9 @@ async function seedActivity() {
       actorRole: "owner",
       action: "inventory.restock",
       entityType: "inventory",
-      entityId: "jd1",
+      entityId: "mk-buffalo-trace",
       locationId: "loc1",
-      summary: "Restocked Jack Daniel's Old No. 7 at Downtown to 24",
+      summary: "Restocked Buffalo Trace Bourbon at Downtown to 24",
       createdAt: new Date("2026-07-20T11:15:00Z"),
       metadata: { quantity: 24, reason: "restock" },
     },
@@ -367,9 +368,9 @@ async function seedActivity() {
       actorRole: "owner",
       action: "inventory.adjust",
       entityType: "inventory",
-      entityId: "gl2",
+      entityId: "mk-glenfiddich-12",
       locationId: "loc3",
-      summary: "Adjusted Glenlivet 12 Double Oak at Uptown by -2",
+      summary: "Adjusted Glenfiddich 12 at Uptown by -2",
       createdAt: new Date("2026-07-28T16:40:00Z"),
       metadata: { delta: -2, reason: "adjustment" },
     },
@@ -396,12 +397,29 @@ async function seedActivity() {
   }
 }
 
+async function removeRetiredCatalog() {
+  const keepIds = products.map((p) => p.id);
+  const retired = await prisma.product.findMany({
+    where: { isCustom: false, id: { notIn: keepIds } },
+    select: { id: true, name: true },
+  });
+  if (!retired.length) return;
+  const ids = retired.map((row) => row.id);
+  console.log(`Removing ${ids.length} retired catalog bottles…`);
+  await prisma.orderItem.deleteMany({ where: { productId: { in: ids } } });
+  await prisma.review.deleteMany({ where: { productId: { in: ids } } });
+  await prisma.inventoryLedger.deleteMany({ where: { productId: { in: ids } } });
+  await prisma.locationInventory.deleteMany({ where: { productId: { in: ids } } });
+  await prisma.product.deleteMany({ where: { id: { in: ids } } });
+}
+
 async function main() {
   console.log(`Seeding ${categories.length} categories…`);
   await seedCategories();
 
   console.log(`Seeding ${products.length} products…`);
   await seedProducts();
+  await removeRetiredCatalog();
 
   const inventoryRows = locations.reduce((n, loc) => n + loc.inventory.length, 0);
   console.log(`Seeding ${locations.length} locations (${inventoryRows} inventory rows)…`);

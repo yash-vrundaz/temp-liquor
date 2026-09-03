@@ -74,7 +74,7 @@ function buildProduct(input: NewBottleInput, all: Product[]): Product {
   const images = composeImages(
     input.imageUrl,
     input.images,
-    [catalogProducts[0]?.images[0] || "/products/bottles/jack-daniels-old-no-7.png"],
+    [catalogProducts[0]?.images[0] || "/products/market/buffalo-trace-bourbon.jpg"],
   );
 
   return {

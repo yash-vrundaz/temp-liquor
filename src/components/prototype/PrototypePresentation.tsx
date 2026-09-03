@@ -54,7 +54,7 @@ const INSIGHTS = [
     title: "Immersion is a differentiator — only if photography still leads",
     body: "High-end liquor commerce wins trust with studio product imagery. 3D and AR earn their place when they help customers inspect presence and place a bottle in real space, not when they replace the catalog.",
     action: "Keep PLP photo-led. Put interactive 3D on product detail, showroom shelves, and AR preview.",
-    image: "/products/bottles/glenlivet-18.png",
+    image: "/products/market/buffalo-trace-bourbon.jpg",
     contain: true,
   },
   {
@@ -70,7 +70,7 @@ const INSIGHTS = [
     title: "AR must be platform-native to feel real on phones",
     body: "Customers expect “view in your space” via the same paths used by major brands. Prototype models can be temporary; the delivery architecture cannot.",
     action: "Ship AR preview now with replaceable models. Commission branded assets after direction is approved.",
-    image: "/products/bottles/jd-old-no-7.png",
+    image: "/products/market/makers-mark-bourbon.jpg",
     contain: true,
   },
   {
@@ -108,7 +108,7 @@ const ARTIFACTS = [
   {
     title: "Product photography",
     caption: "Catalog standard — photography before 3D",
-    image: "/products/bottles/jd-gentleman-jack.png",
+    image: "/products/market/don-julio-blanco.jpg",
     contain: true,
   },
   {

@@ -9,6 +9,7 @@
     "lint": "eslint",
     "generate:bottles": "node scripts/generate-bottles-gltf.mjs",
     "fetch:product-images": "node scripts/fetch-product-images.mjs",
+    "fetch:market-images": "node scripts/fetch-market-images.mjs",
     "generate:progress-pdf": "python scripts/generate-client-progress-pdf.py",
     "db:generate": "prisma generate",
     "db:push": "prisma db push",

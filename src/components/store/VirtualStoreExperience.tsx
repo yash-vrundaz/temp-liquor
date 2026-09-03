@@ -124,6 +124,7 @@ const MIXED_CATEGORIES = new Set([
   "cognac",
   "aperitif",
   "vermouth",
+  "rtd",
 ]);
 
 /**

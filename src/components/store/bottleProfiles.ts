@@ -157,6 +157,7 @@ export function shapeForCategory(category: CategorySlug): BottleShape {
     case "rum":
       return "rum";
     case "tequila":
+    case "mezcal":
       return "tequila";
     case "cognac":
     case "brandy":
@@ -168,6 +169,7 @@ export function shapeForCategory(category: CategorySlug): BottleShape {
     case "beer":
       return "beer";
     case "liqueur":
+    case "rtd":
       return "liqueur";
     default:
       return "scotch";

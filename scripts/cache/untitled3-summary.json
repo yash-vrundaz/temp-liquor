@@ -1,0 +1,221 @@
+{
+  "count": 480,
+  "paths": {
+    "beer": 96,
+    "spirits": 384
+  },
+  "groups": [
+    [
+      "?",
+      124
+    ],
+    [
+      "Scotch",
+      96
+    ],
+    [
+      "Tequila",
+      96
+    ],
+    [
+      "Lager",
+      77
+    ],
+    [
+      "Bourbon",
+      68
+    ],
+    [
+      "Pilsner",
+      13
+    ],
+    [
+      "Bock",
+      6
+    ]
+  ],
+  "topBrands": [
+    [
+      "(none)",
+      79
+    ],
+    [
+      "Johnnie Walker",
+      11
+    ],
+    [
+      "Jack Daniel's",
+      10
+    ],
+    [
+      "Jim Beam",
+      10
+    ],
+    [
+      "Jose Cuervo",
+      9
+    ],
+    [
+      "Maker's Mark",
+      9
+    ],
+    [
+      "Michelob",
+      8
+    ],
+    [
+      "MODELO",
+      8
+    ],
+    [
+      "Buchanan's",
+      8
+    ],
+    [
+      "Don Julio",
+      8
+    ],
+    [
+      "Lunazul",
+      8
+    ],
+    [
+      "Espolòn",
+      8
+    ],
+    [
+      "Miller",
+      7
+    ],
+    [
+      "DOS EQUIS",
+      7
+    ],
+    [
+      "Evan Williams",
+      7
+    ],
+    [
+      "Old Forester",
+      7
+    ],
+    [
+      "The Glenlivet",
+      6
+    ],
+    [
+      "Woodford Reserve",
+      6
+    ],
+    [
+      "BUD LIGHT",
+      5
+    ],
+    [
+      "Shiner",
+      5
+    ],
+    [
+      "Macallan",
+      5
+    ],
+    [
+      "El Destilador",
+      5
+    ],
+    [
+      "Wild Turkey",
+      5
+    ],
+    [
+      "Benchmark",
+      5
+    ],
+    [
+      "COORS LIGHT",
+      4
+    ],
+    [
+      "Bulleit",
+      4
+    ],
+    [
+      "Basil Hayden",
+      4
+    ],
+    [
+      "Lone Star 1835",
+      4
+    ],
+    [
+      "Four Roses",
+      4
+    ],
+    [
+      "1800",
+      3
+    ],
+    [
+      "SAPPORO",
+      3
+    ],
+    [
+      "PACIFICO",
+      3
+    ],
+    [
+      "Dewar's",
+      3
+    ],
+    [
+      "Glenfiddich",
+      3
+    ],
+    [
+      "Teremana",
+      3
+    ],
+    [
+      "Patrón",
+      3
+    ],
+    [
+      "Mijenta",
+      3
+    ],
+    [
+      "1792",
+      2
+    ],
+    [
+      "EQUAL PARTS",
+      2
+    ],
+    [
+      "PABST",
+      2
+    ]
+  ],
+  "sampleUrls": [
+    "/shop/beer/michelob-ultra-16oz-cans/",
+    "/shop/beer/equal-parts-kaizen-rice-lager-cans-2/",
+    "/shop/beer/pabst-blue-ribbon-cans/",
+    "/shop/beer/budweiser-16oz-cans/",
+    "/shop/beer/saint-arnold-grand-prize-lager-cans/",
+    "/shop/beer/busch-light-cans/",
+    "/shop/beer/michelob-ultra-24pk-suitcase-can/",
+    "/shop/beer/schlitz-malt-liquor-cans/",
+    "/shop/beer/equal-parts-lager-rotator-cans/",
+    "/shop/beer/manhattan-project-necessary-evil-pilsner-cans/",
+    "/shop/beer/miller-lite-16oz-cans/",
+    "/shop/beer/eureka-heights-lucky-life-rice-lager-cans/",
+    "/shop/beer/bud-light-24pk-loose-bottles/",
+    "/shop/beer/heineken-lager-24oz-can/",
+    "/shop/beer/independence-native-texan-pilsner-cans/",
+    "/shop/beer/michelob-ultra-12pk-cans/",
+    "/shop/beer/miller-lite-24pk-suitcase-cans/",
+    "/shop/beer/galveston-island-sunset-siesta-lager-cans/",
+    "/shop/beer/modelo-especial-24oz-can/",
+    "/shop/beer/budweiser-25oz-tall-can-2/"
+  ]
+}

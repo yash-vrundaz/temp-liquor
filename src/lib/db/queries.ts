@@ -480,7 +480,7 @@ export async function createCustomProduct(
   const notes = splitCsv(input.tastingNotes, ["To taste"]);
   const pairings = splitCsv(input.foodPairings, []);
   const imageFallback =
-    seedProducts[0]?.images[0] || "/products/bottles/jd-old-no-7.png";
+    seedProducts[0]?.images[0] || "/products/market/buffalo-trace-bourbon.jpg";
   const images = composeProductImages(input.imageUrl, input.images, [imageFallback]);
 
   const product: Product = {
