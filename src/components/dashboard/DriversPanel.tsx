@@ -167,6 +167,7 @@ export function DriversPanel({ embedded = false }: { embedded?: boolean }) {
 
   const save = async (event: FormEvent) => {
     event.preventDefault();
+    if (!canManage) return;
     const validationError = validateForm(form);
     if (validationError) {
       setError(validationError);
@@ -227,6 +228,7 @@ export function DriversPanel({ embedded = false }: { embedded?: boolean }) {
   };
 
   const deactivate = async (driver: Driver) => {
+    if (!canManage) return;
     if (!window.confirm(`Deactivate ${driver.name}? They will no longer appear in delivery assignment.`)) {
       return;
     }

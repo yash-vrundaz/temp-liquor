@@ -5,6 +5,10 @@ import { isBuiltInRole } from "@/lib/auth/role-catalog";
 export const PERMISSIONS = [
   "dashboard.access",
   "dashboard.overview",
+  "pos.access",
+  "pos.sell",
+  "orders.view",
+  "orders.manage",
   "inventory.view",
   "inventory.adjust",
   "inventory.restock",
@@ -50,13 +54,37 @@ export const PERMISSION_META: Record<
     group: "Dashboard",
     kind: "read",
     label: "Open dashboard",
-    description: "Sign in to the staff command center",
+    description: "Sign in to the staff command center and open Profile",
   },
   "dashboard.overview": {
     group: "Dashboard",
     kind: "action",
-    label: "View analytics",
-    description: "See sales, orders, and branch performance",
+    label: "View overview",
+    description: "See sales analytics, order health, and branch performance charts",
+  },
+  "pos.access": {
+    group: "POS",
+    kind: "read",
+    label: "Open POS",
+    description: "Open the point of sale register and browse bottles by store",
+  },
+  "pos.sell": {
+    group: "POS",
+    kind: "action",
+    label: "Complete sales",
+    description: "Ring up walk-in sales, deduct stock, and create orders",
+  },
+  "orders.view": {
+    group: "Orders",
+    kind: "read",
+    label: "View orders",
+    description: "See store orders across online, pickup, and POS sales",
+  },
+  "orders.manage": {
+    group: "Orders",
+    kind: "action",
+    label: "Manage orders",
+    description: "Cancel open orders and update fulfillment status for accessible stores",
   },
   "inventory.view": {
     group: "Inventory",
@@ -209,6 +237,10 @@ export const ROLE_PERMISSIONS: Record<UserRole, readonly Permission[]> = {
   staff: [
     "dashboard.access",
     "dashboard.overview",
+    "pos.access",
+    "pos.sell",
+    "orders.view",
+    "orders.manage",
     "inventory.view",
     "inventory.adjust",
     "inventory.restock",
@@ -221,6 +253,10 @@ export const ROLE_PERMISSIONS: Record<UserRole, readonly Permission[]> = {
   admin: [
     "dashboard.access",
     "dashboard.overview",
+    "pos.access",
+    "pos.sell",
+    "orders.view",
+    "orders.manage",
     "inventory.view",
     "inventory.adjust",
     "inventory.restock",
@@ -251,6 +287,8 @@ export const ROLE_PERMISSIONS: Record<UserRole, readonly Permission[]> = {
 
 export const PERMISSION_GROUPS = [
   "Dashboard",
+  "POS",
+  "Orders",
   "Inventory",
   "Catalog",
   "Locations",

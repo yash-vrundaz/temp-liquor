@@ -83,8 +83,15 @@ body {
   overflow-x: auto;
   overscroll-behavior-x: contain;
   -webkit-overflow-scrolling: touch;
-  scrollbar-width: thin;
+  scrollbar-width: none;
+  -ms-overflow-style: none;
   mask-image: linear-gradient(90deg, transparent, #000 12px, #000 calc(100% - 12px), transparent);
+}
+
+.h-scroll::-webkit-scrollbar {
+  display: none;
+  width: 0;
+  height: 0;
 }
 
 .h-scroll > * {
@@ -93,6 +100,13 @@ body {
 
 @media (min-width: 768px) {
   .h-scroll {
+    mask-image: none;
+  }
+
+  /* Chip rows that should wrap instead of scroll on desktop */
+  .h-scroll.h-scroll-wrap {
+    flex-wrap: wrap;
+    overflow: visible;
     mask-image: none;
   }
 }

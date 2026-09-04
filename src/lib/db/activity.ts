@@ -97,6 +97,8 @@ export async function fetchActivityLogs(filters: {
   actorUserId?: string;
   entityType?: string;
   locationId?: string;
+  /** When set (and locationId is not), restrict to these stores plus global (null) events. */
+  locationIds?: string[];
   q?: string;
   from?: string;
   to?: string;
@@ -119,24 +121,34 @@ export async function fetchActivityLogs(filters: {
         }
       : undefined;
 
+  const andParts: Prisma.ActivityLogWhereInput[] = [];
+  if (filters.locationId) {
+    andParts.push({ locationId: filters.locationId });
+  } else if (filters.locationIds) {
+    andParts.push({
+      OR: [
+        { locationId: { in: filters.locationIds } },
+        { locationId: null },
+      ],
+    });
+  }
+  if (filters.q) {
+    andParts.push({
+      OR: [
+        { summary: { contains: filters.q, mode: "insensitive" } },
+        { actorName: { contains: filters.q, mode: "insensitive" } },
+        { actorEmail: { contains: filters.q, mode: "insensitive" } },
+        { entityId: { contains: filters.q, mode: "insensitive" } },
+      ],
+    });
+  }
+
   const where: Prisma.ActivityLogWhereInput = {
     ...(filters.action ? { action: filters.action } : {}),
     ...(filters.actorUserId ? { actorUserId: filters.actorUserId } : {}),
     ...(filters.entityType ? { entityType: filters.entityType } : {}),
-    ...(filters.locationId ? { locationId: filters.locationId } : {}),
     ...(createdAt ? { createdAt } : {}),
-    ...(filters.q
-      ? {
-          // No `mode: "insensitive"` on MySQL — the utf8mb4_unicode_ci column
-          // collation already makes `contains` case-insensitive.
-          OR: [
-            { summary: { contains: filters.q } },
-            { actorName: { contains: filters.q } },
-            { actorEmail: { contains: filters.q } },
-            { entityId: { contains: filters.q } },
-          ],
-        }
-      : {}),
+    ...(andParts.length ? { AND: andParts } : {}),
   };
 
   const limit = Math.min(100, Math.max(1, filters.limit ?? 50));

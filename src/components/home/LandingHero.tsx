@@ -13,7 +13,7 @@ import { ArrowRight, View } from "lucide-react";
 gsap.registerPlugin(ScrollTrigger);
 
 const HERO_PRODUCT =
-  products.find((p) => p.slug === "jack-daniels-old-no-7") ?? products[0];
+  products.find((p) => p.slug === "buffalo-trace-bourbon") ?? products[0];
 
 /** Floating gold dust — cinematic particle field over the bar scene */
 function GoldParticles() {

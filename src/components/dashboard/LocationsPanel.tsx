@@ -253,17 +253,27 @@ export function LocationsPanel() {
   };
 
   return (
-    <section className="mt-6">
-      <div className="flex flex-col gap-4 border-b border-white/10 pb-5 sm:flex-row sm:items-end sm:justify-between">
-        <div>
-          <h2 className="font-display text-2xl text-cream sm:text-3xl">Locations</h2>
-          <p className="mt-1 text-sm text-muted">Add or remove stores. Set delivery fees, free-delivery thresholds, and tax per location.</p>
+    <section className="mt-0">
+      <div className="flex flex-col gap-3 border-b border-white/10 pb-4 sm:flex-row sm:items-end sm:justify-between sm:gap-4 sm:pb-5">
+        <div className="min-w-0">
+          <p className="hidden text-[10px] uppercase tracking-[0.22em] text-gold lg:flex lg:items-center lg:gap-2">
+            <MapPin size={12} className="text-gold" />
+            Locations
+          </p>
+          <h2 className="hidden font-display text-3xl text-cream lg:mt-2 lg:block xl:text-4xl">
+            Locations
+          </h2>
+          <p className="max-w-2xl text-sm text-muted lg:mt-2">
+            Add, edit, or remove stores in the Sam&apos;s network.
+          </p>
         </div>
         {canCreate ? (
-          <Button size="sm" onClick={openCreate}>
-            <Plus size={14} />
-            Add store
-          </Button>
+          <div className="flex shrink-0 flex-wrap gap-2 sm:justify-end">
+            <Button size="sm" onClick={openCreate}>
+              <Plus size={14} />
+              Add store
+            </Button>
+          </div>
         ) : null}
       </div>
       {!dbReady ? (

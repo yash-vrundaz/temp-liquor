@@ -11,6 +11,7 @@ export function SiteChrome({ children }: { children: React.ReactNode }) {
   const pathname = usePathname();
   const bare = pathname === "/prototype" || pathname.startsWith("/prototype/");
   const immersive = pathname.startsWith("/virtual-store");
+  const isDashboard = pathname.startsWith("/dashboard");
 
   if (bare) {
     return (
@@ -33,7 +34,7 @@ export function SiteChrome({ children }: { children: React.ReactNode }) {
       >
         {children}
       </main>
-      {!immersive && <Footer />}
+      {!immersive && !isDashboard && <Footer />}
       <CartAddedToast />
       <WishlistAddedToast />
       <AgeGate />

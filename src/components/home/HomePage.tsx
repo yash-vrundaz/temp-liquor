@@ -13,7 +13,22 @@ import { HomeEvents } from "./HomeEvents";
 
 export function HomePage() {
   const featured = products.filter((p) => p.isPremium).slice(0, 4);
-  const carouselBottles = products.filter((p) => p.brand === "Jack Daniel's");
+  // Prefer clean single-bottle shots — lifestyle / multi-bottle photos break the rail.
+  const carouselSlugs = [
+    "buffalo-trace-bourbon",
+    "makers-mark-bourbon",
+    "jim-beam-white-label",
+    "bulleit-bourbon",
+    "woodford-reserve-bourbon",
+    "wild-turkey-101-bourbon",
+    "knob-creek-9-year",
+    "blantons-single-barrel",
+    "still-austin-the-musician",
+    "penelope-barrel-strength-bourbon",
+  ];
+  const carouselBottles = carouselSlugs
+    .map((slug) => products.find((p) => p.slug === slug))
+    .filter((p): p is (typeof products)[number] => Boolean(p?.images[0]));
 
   return (
     <>
@@ -21,7 +36,7 @@ export function HomePage() {
 
       <BottleCarousel
         products={carouselBottles}
-        eyebrow="Our whiskeys"
+        eyebrow="Bourbon"
         title="Explore the collection"
       />
 

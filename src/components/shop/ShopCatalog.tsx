@@ -63,7 +63,7 @@ export function ShopCatalog() {
         title="All collections"
         description="Filter by category or explore the full store catalog."
       />
-      <div className="-mx-1 mb-6 h-scroll px-1 pb-1 md:mb-10 md:flex-wrap md:overflow-visible">
+      <div className="h-scroll h-scroll-wrap -mx-1 mb-6 px-1 md:mb-10 md:gap-2">
         {getCategories().map((c) => (
           <Link
             key={c.slug}

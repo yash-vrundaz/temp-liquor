@@ -98,6 +98,20 @@ export const categories: {
     description: "Herbals, creams, and dessert spirits.",
     color: "#9B6B9E",
   },
+  {
+    slug: "mezcal",
+    name: "Mezcal",
+    tagline: "Smoke & agave",
+    description: "Artisanal agave spirits from Oaxaca and beyond.",
+    color: "#6B5344",
+  },
+  {
+    slug: "rtd",
+    name: "Ready to Drink",
+    tagline: "Cocktails to go",
+    description: "Premixed cocktails, hard seltzers, and party-ready cans.",
+    color: "#E07A5F",
+  },
 ];
 
 import { runtimeData } from "@/lib/runtime-data-bridge";

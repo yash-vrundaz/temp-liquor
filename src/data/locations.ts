@@ -13,7 +13,7 @@ function catalogRow(index: number) {
     stock: BASE_COUNTS[index % BASE_COUNTS.length],
     featured: index < 6,
     promoPrice:
-      p.slug === "jack-daniels-old-no-7" ? 24 : p.slug === "glenlivet-12" ? 48 : undefined,
+      p.slug === "titos-handmade-vodka" ? 16 : p.slug === "buffalo-trace-bourbon" ? 24 : undefined,
   };
 }
 

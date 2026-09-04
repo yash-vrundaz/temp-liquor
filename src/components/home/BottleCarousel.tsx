@@ -31,9 +31,9 @@ export function BottleCarousel({
   const router = useRouter();
   const [active, setActive] = useState(0);
   const [hovering, setHovering] = useState(false);
-  const [step, setStep] = useState(150);
+  const [step, setStep] = useState(220);
   const [bottleW, setBottleW] = useState(180);
-  const bottleH = Math.round(bottleW * 2);
+  const bottleH = Math.round(bottleW * 2.15);
 
   const stageRef = useRef<HTMLDivElement>(null);
   const dragStartX = useRef(0);
@@ -65,15 +65,15 @@ export function BottleCarousel({
     [goTo],
   );
 
-  // Responsive spacing
+  // Responsive spacing — keep bottles mostly side-by-side, not stacked.
   useEffect(() => {
     const el = stageRef.current;
     if (!el) return;
     const update = () => {
       const w = el.clientWidth;
-      const bw = w < 640 ? 130 : w < 900 ? 165 : 200;
+      const bw = w < 640 ? 120 : w < 900 ? 150 : 180;
       setBottleW(bw);
-      setStep(Math.round(bw * 0.82));
+      setStep(Math.round(bw * 1.22));
     };
     update();
     const ro = new ResizeObserver(update);
@@ -148,10 +148,10 @@ export function BottleCarousel({
             const abs = Math.abs(offset);
             const hidden = abs > VISIBLE;
             const isCenter = offset === 0;
-            const scale = isCenter ? 1 : Math.max(0.62, 1 - abs * 0.14);
-            const opacity = hidden ? 0 : isCenter ? 1 : Math.max(0.35, 1 - abs * 0.28);
+            const scale = isCenter ? 1 : Math.max(0.55, 1 - abs * 0.18);
+            const opacity = hidden ? 0 : isCenter ? 1 : Math.max(0.28, 1 - abs * 0.32);
             const z = hidden ? 0 : 50 - abs;
-            const y = isCenter ? 0 : abs * 10;
+            const y = isCenter ? 0 : abs * 14;
 
             return (
               <motion.button
@@ -184,37 +184,40 @@ export function BottleCarousel({
                   y,
                   scale,
                   opacity,
-                  filter: isCenter ? "brightness(1)" : "brightness(0.65)",
+                  filter: isCenter ? "brightness(1)" : "brightness(0.55)",
                 }}
                 transition={{ type: "spring", stiffness: 320, damping: 32, mass: 0.7 }}
               >
-                <div className="relative w-full" style={{ height: bottleH }}>
+                <div
+                  className="relative w-full overflow-hidden"
+                  style={{ height: bottleH }}
+                >
                   <Image
                     src={p.images[0]}
                     alt={p.name}
                     fill
-                    className="pointer-events-none object-contain drop-shadow-[0_24px_40px_rgba(0,0,0,0.65)]"
+                    className="pointer-events-none object-contain object-bottom drop-shadow-[0_24px_40px_rgba(0,0,0,0.65)]"
                     sizes="200px"
                     priority={abs <= 1}
                     draggable={false}
                   />
                   <div
                     aria-hidden
-                    className="pointer-events-none absolute inset-x-0 -bottom-12 h-12 overflow-hidden opacity-35 md:-bottom-14 md:h-14"
+                    className="pointer-events-none absolute inset-x-0 -bottom-12 h-12 overflow-hidden opacity-30 md:-bottom-14 md:h-14"
                     style={{
                       maskImage: "linear-gradient(to bottom, black, transparent)",
                       WebkitMaskImage: "linear-gradient(to bottom, black, transparent)",
                     }}
                   >
                     <div
-                      className="relative w-full -scale-y-100 opacity-45"
+                      className="relative w-full -scale-y-100 opacity-40"
                       style={{ height: bottleH }}
                     >
                       <Image
                         src={p.images[0]}
                         alt=""
                         fill
-                        className="object-contain blur-[1px]"
+                        className="object-contain object-top blur-[1px]"
                         sizes="200px"
                         draggable={false}
                       />

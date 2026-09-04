@@ -183,7 +183,7 @@ export function categorySpendSeries(orders: Order[]) {
 }
 
 export function fulfillmentSeries(orders: Order[]) {
-  const map = { delivery: 0, pickup: 0 };
+  const map = { delivery: 0, pickup: 0, pos: 0 };
   for (const order of completedOrders(orders)) {
     map[order.fulfillment] += 1;
   }
@@ -199,6 +199,12 @@ export function fulfillmentSeries(orders: Order[]) {
       key: "pickup" as const,
       value: map.pickup,
       fill: CHART_COLORS.info,
+    },
+    {
+      name: "In-store",
+      key: "pos" as const,
+      value: map.pos,
+      fill: CHART_COLORS.success,
     },
   ];
 }
@@ -453,7 +459,9 @@ export function buildSelectionDetails(
         : selection.type === "fulfillment"
           ? selection.key === "delivery"
             ? CHART_COLORS.gold
-            : CHART_COLORS.info
+            : selection.key === "pos"
+              ? CHART_COLORS.success
+              : CHART_COLORS.info
           : CHART_COLORS.gold,
   };
 }

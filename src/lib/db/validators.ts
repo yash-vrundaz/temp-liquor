@@ -238,8 +238,50 @@ export const placeOrderSchema = z
     }
   });
 
+export const placePosOrderSchema = z
+  .object({
+    locationId: z.string().min(1),
+    fulfillment: z.enum(["pos", "pickup", "delivery"]),
+    paymentMethod: z.enum(["cash", "card", "other"]).optional(),
+    customerName: z.string().trim().min(2).max(120).optional(),
+    customerEmail: z.union([z.string().trim().email(), z.literal("")]).optional(),
+    customerPhone: z
+      .string()
+      .trim()
+      .regex(/^$|^\(\d{3}\) \d{3}-\d{4}$/, "Enter a valid phone like (212) 555-0100")
+      .optional(),
+    coupon: z.string().nullable().optional(),
+    delivery: deliveryAddressSchema.optional(),
+    items: z
+      .array(
+        z.object({
+          productId: z.string().min(1),
+          quantity: z.number().int().positive().max(99),
+        }),
+      )
+      .min(1)
+      .max(80),
+  })
+  .superRefine((data, ctx) => {
+    if (data.fulfillment === "delivery" && !data.delivery) {
+      ctx.addIssue({
+        code: z.ZodIssueCode.custom,
+        message: "Delivery address is required for delivery orders.",
+        path: ["delivery"],
+      });
+    }
+  });
+
 export const cancelOrderSchema = z.object({
   orderId: z.string().min(1),
+  /** @deprecated Ignored — cancel requires a signed-in session. */
+  userId: z.string().min(1).optional(),
+});
+
+export const patchOrderSchema = z.object({
+  orderId: z.string().min(1),
+  action: z.enum(["cancel", "status"]).optional().default("cancel"),
+  status: z.enum(["processing", "shipped", "ready", "delivered"]).optional(),
   /** @deprecated Ignored — cancel requires a signed-in session. */
   userId: z.string().min(1).optional(),
 });

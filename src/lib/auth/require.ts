@@ -1,7 +1,7 @@
 import { NextResponse } from "next/server";
 import { fetchUserById } from "@/lib/db/queries";
 import { isStaffRole } from "@/lib/auth/roles";
-import { PERMISSION_META, hasPermission, type Permission } from "@/lib/auth/permissions";
+import { PERMISSION_META, hasAnyPermission, hasPermission, type Permission } from "@/lib/auth/permissions";
 import { getAuthClaims } from "@/lib/auth/session";
 import { warmRoleCatalog } from "@/lib/db/roles-admin";
 import type { UserProfile } from "@/types";
@@ -53,6 +53,26 @@ export async function requirePermission(permission: Permission): Promise<AuthOk 
       user: null,
       error: NextResponse.json(
         { error: `${PERMISSION_META[permission].label} is not allowed for this account.` },
+        { status: 403 },
+      ),
+    };
+  }
+  return result;
+}
+
+export async function requireAnyPermission(
+  permissions: Permission[],
+): Promise<AuthOk | AuthErr> {
+  const result = await requireUser();
+  if (result.error) return result;
+  if (!hasAnyPermission(result.user, permissions)) {
+    const label = permissions
+      .map((permission) => PERMISSION_META[permission].label)
+      .join(" or ");
+    return {
+      user: null,
+      error: NextResponse.json(
+        { error: `${label} is not allowed for this account.` },
         { status: 403 },
       ),
     };

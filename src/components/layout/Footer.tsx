@@ -10,7 +10,7 @@ export function Footer() {
 
   return (
     <footer className="border-t border-white/5 bg-[#050505] px-0 pt-12 pb-[max(2rem,env(safe-area-inset-bottom))] sm:pt-16">
-      <div className="mx-auto grid max-w-7xl gap-10 px-3 sm:grid-cols-2 sm:px-4 lg:grid-cols-4 md:px-8">
+      <div className="grid w-full gap-10 px-3 sm:grid-cols-2 sm:px-5 lg:grid-cols-4 md:px-6 lg:px-8 xl:px-10 2xl:px-12">
         <div className="sm:col-span-2 lg:col-span-1">
           <p className="font-display text-2xl leading-tight text-[var(--cream)] md:text-3xl">
             Sam&apos;s Discount Liquor
@@ -80,7 +80,7 @@ export function Footer() {
           </p>
         </div>
       </div>
-      <div className="mx-auto mt-12 flex max-w-7xl flex-wrap justify-between gap-2 border-t border-white/5 px-3 pt-6 text-xs text-[var(--muted)] sm:px-4 md:px-8">
+      <div className="mt-12 flex w-full flex-wrap justify-between gap-2 border-t border-white/5 px-3 pt-6 text-xs text-[var(--muted)] sm:px-5 md:px-6 lg:px-8 xl:px-10 2xl:px-12">
         <span>© {new Date().getFullYear()} Sam&apos;s Discount Liquor</span>
         <span>Must be 21+</span>
       </div>

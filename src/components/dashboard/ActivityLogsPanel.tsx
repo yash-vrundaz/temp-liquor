@@ -9,10 +9,11 @@ import {
 } from "lucide-react";
 import { format, formatDistanceToNow } from "date-fns";
 import { apiFetchActivity, apiFetchUsers } from "@/lib/api-mutations";
-import { getAllLocations } from "@/data/locations";
+import { accessibleLocations } from "@/lib/auth/location-access";
 import { isDbConnected } from "@/lib/runtime-data";
 import { isConnectionError } from "@/lib/connection-messages";
 import { ConnectionNotice } from "@/components/dashboard/ConnectionNotice";
+import { PanelLoading } from "@/components/dashboard/DashboardLoading";
 import { hasPermission } from "@/lib/auth/permissions";
 import { useUserStore } from "@/store/user";
 import type { ActivityLogEntry } from "@/types";
@@ -39,7 +40,9 @@ const ACTION_LABELS: Record<string, string> = {
   "auth.login": "Sign in",
   "auth.signup": "Signed up",
   "order.placed": "Order placed",
+  "pos.sale": "POS sale",
   "order.cancelled": "Order cancelled",
+  "order.status": "Order status",
   "inventory.set": "Stock set",
   "inventory.adjust": "Stock adjusted",
   "inventory.restock": "Restocked",
@@ -80,7 +83,9 @@ const ACTION_TONE: Record<string, string> = {
   "auth.login": "border-sky-400/30 bg-sky-400/10 text-sky-200",
   "auth.signup": "border-sky-400/30 bg-sky-400/10 text-sky-200",
   "order.placed": "border-(--success)/30 bg-(--success)/10 text-(--success)",
+  "pos.sale": "border-(--gold)/30 bg-(--gold)/10 text-gold",
   "order.cancelled": "border-(--danger)/30 bg-(--danger)/10 text-(--danger)",
+  "order.status": "border-(--gold)/30 bg-(--gold)/10 text-gold",
   "inventory.set": "border-(--gold)/30 bg-(--gold)/10 text-gold",
   "inventory.adjust": "border-(--gold)/30 bg-(--gold)/10 text-gold",
   "inventory.restock": "border-emerald-400/30 bg-emerald-400/10 text-emerald-200",
@@ -279,21 +284,29 @@ export function ActivityLogsPanel() {
 
   const actors = useMemo(() => [...knownActors.entries()], [knownActors]);
 
-  const locations = getAllLocations();
+  const locations = useMemo(() => accessibleLocations(profile), [profile]);
 
   return (
-    <section className="mt-6">
-      <div className="flex flex-col gap-4 border-b border-white/10 pb-5 sm:flex-row sm:items-end sm:justify-between">
+    <section className="mt-0">
+      <div className="flex flex-col gap-3 border-b border-white/10 pb-4 sm:flex-row sm:items-end sm:justify-between sm:gap-4 sm:pb-5">
         <div className="min-w-0">
-          <h2 className="font-display text-2xl text-cream sm:text-3xl">Activity log</h2>
-          <p className="mt-1 text-sm text-muted">
-            Who changed what — orders, stock, catalog, and sign-ins
+          <p className="hidden text-[10px] uppercase tracking-[0.22em] text-gold lg:flex lg:items-center lg:gap-2">
+            <ClipboardList size={12} className="text-gold" />
+            Activity
+          </p>
+          <h2 className="hidden font-display text-3xl text-cream lg:mt-2 lg:block xl:text-4xl">
+            Activity
+          </h2>
+          <p className="max-w-2xl text-sm text-muted lg:mt-2">
+            Audit trail of stock, orders, catalog, and account changes.
           </p>
         </div>
-        <Button size="sm" variant="secondary" onClick={() => void load()} disabled={loading}>
-          <RefreshCw size={14} className={loading ? "animate-spin" : ""} />
-          Refresh
-        </Button>
+        <div className="flex shrink-0 flex-wrap gap-2 sm:justify-end">
+          <Button size="sm" variant="secondary" onClick={() => void load()} disabled={loading}>
+            <RefreshCw size={14} className={loading ? "animate-spin" : ""} />
+            Refresh
+          </Button>
+        </div>
       </div>
 
       {!isDbConnected() ? (
@@ -491,6 +504,10 @@ export function ActivityLogsPanel() {
       </div>
       {error && <p className="mt-2 text-sm text-red-300">{error}</p>}
 
+      {loading && logs.length === 0 ? (
+        <PanelLoading label="Loading activity…" />
+      ) : (
+      <>
       <MobileSortBar
         className="mt-4 lg:hidden"
         columns={[
@@ -625,6 +642,8 @@ export function ActivityLogsPanel() {
           <ClipboardList className="mx-auto mb-3 text-gold/70" size={28} />
           No activity yet. Place an order, restock a bottle, or sign in as owner to start the trail.
         </div>
+      )}
+      </>
       )}
     </section>
   );

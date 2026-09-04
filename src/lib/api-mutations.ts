@@ -160,10 +160,58 @@ export async function apiPlaceOrder(input: {
   });
 }
 
+export async function apiPlacePosOrder(input: {
+  locationId: string;
+  fulfillment: "pos" | "pickup" | "delivery";
+  items: { productId: string; quantity: number }[];
+  paymentMethod?: "cash" | "card" | "other";
+  customerName?: string;
+  customerEmail?: string;
+  customerPhone?: string;
+  coupon?: string | null;
+  delivery?: import("@/types").DeliveryAddress;
+}) {
+  return apiFetch<{
+    order: Order;
+    userId: string;
+    loyaltyPoints: number;
+    inventory: InventorySnapshot;
+  }>("/api/pos/orders", {
+    method: "POST",
+    body: JSON.stringify(input),
+  });
+}
+
 export async function apiCancelOrder(_userId: string, orderId: string) {
   return apiFetch<{ order: Order; inventory?: InventorySnapshot }>("/api/orders", {
     method: "PATCH",
-    body: JSON.stringify({ orderId }),
+    body: JSON.stringify({ orderId, action: "cancel" }),
+  });
+}
+
+export async function apiFetchOrders(opts?: {
+  locationId?: string;
+  status?: string;
+  fulfillment?: string;
+  q?: string;
+}) {
+  const params = new URLSearchParams();
+  if (opts?.locationId) params.set("locationId", opts.locationId);
+  if (opts?.status && opts.status !== "all") params.set("status", opts.status);
+  if (opts?.fulfillment && opts.fulfillment !== "all") params.set("fulfillment", opts.fulfillment);
+  if (opts?.q?.trim()) params.set("q", opts.q.trim());
+  const qs = params.toString();
+  return apiFetch<{
+    orders: Array<
+      Order & { customerId: string; customerName: string; customerEmail: string }
+    >;
+  }>(`/api/orders${qs ? `?${qs}` : ""}`);
+}
+
+export async function apiUpdateOrderStatus(orderId: string, status: Order["status"]) {
+  return apiFetch<{ order: Order }>("/api/orders", {
+    method: "PATCH",
+    body: JSON.stringify({ orderId, action: "status", status }),
   });
 }
 
