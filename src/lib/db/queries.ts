@@ -16,6 +16,7 @@ import { events as seedEvents, reviews as seedReviews, demoUser } from "@/data/e
 import { getCouponDiscount } from "@/lib/commerce";
 import { calculateShipping, calculateTax } from "@/lib/fulfillment-pricing";
 import { ensureLocationPricingSchema, mapLocationPricing } from "@/lib/db/location-pricing";
+import { ensureInventoryVisibilityColumn } from "@/lib/db/inventory-visibility";
 import type { Prisma } from "@prisma/client";
 import { recordActivity } from "@/lib/db/activity";
 import { attachProfileExtras } from "@/lib/db/users";
@@ -71,6 +72,7 @@ export async function fetchProductById(id: string) {
 export async function fetchAllLocations() {
   if (!isDbConfigured()) return seedLocations;
   await ensureLocationPricingSchema();
+  await ensureInventoryVisibilityColumn();
   const rows = await prisma.location.findMany({
     include: { inventory: true },
     orderBy: { name: "asc" },
@@ -80,6 +82,8 @@ export async function fetchAllLocations() {
 
 export async function fetchLocationBySlug(slug: string) {
   if (!isDbConfigured()) return seedLocations.find((l) => l.slug === slug);
+  await ensureLocationPricingSchema();
+  await ensureInventoryVisibilityColumn();
   const row = await prisma.location.findUnique({
     where: { slug },
     include: { inventory: true },
@@ -89,6 +93,8 @@ export async function fetchLocationBySlug(slug: string) {
 
 export async function fetchLocationById(id: string) {
   if (!isDbConfigured()) return seedLocations.find((l) => l.id === id);
+  await ensureLocationPricingSchema();
+  await ensureInventoryVisibilityColumn();
   const row = await prisma.location.findUnique({
     where: { id },
     include: { inventory: true },
@@ -266,16 +272,6 @@ export async function fetchInventoryState() {
   for (const e of events) seats[e.id] = e.seatsAvailable;
 
   return { stocks, seats, hidden };
-}
-
-let visibilityColumnReady = false;
-
-async function ensureInventoryVisibilityColumn() {
-  if (!isDbConfigured() || visibilityColumnReady) return;
-  await prisma.$executeRawUnsafe(
-    `ALTER TABLE location_inventory ADD COLUMN IF NOT EXISTS hidden BOOLEAN NOT NULL DEFAULT false`,
-  );
-  visibilityColumnReady = true;
 }
 
 export async function setProductVisibility(
@@ -758,6 +754,8 @@ export async function adjustInventory(
 ) {
   if (!isDbConfigured()) return true;
   if (!delta) return true;
+
+  await ensureInventoryVisibilityColumn();
 
   const ok = await prisma.$transaction(async (tx) => {
     const existing = await tx.locationInventory.findUnique({
@@ -1247,6 +1245,8 @@ export async function cancelOrder(
 
 export async function resetInventory(locationId?: string, actorUserId?: string) {
   if (!isDbConfigured()) return;
+
+  await ensureInventoryVisibilityColumn();
 
   await prisma.$transaction(async (tx) => {
     const rows = await tx.locationInventory.findMany(
