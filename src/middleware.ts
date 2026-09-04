@@ -20,7 +20,11 @@ export function middleware(request: NextRequest) {
   if (hasJwt) return NextResponse.next();
 
   const login = new URL("/login", request.url);
-  login.searchParams.set("next", pathname);
+  const next =
+    request.nextUrl.search && pathname.startsWith("/dashboard")
+      ? `${pathname}${request.nextUrl.search}`
+      : pathname;
+  login.searchParams.set("next", next);
   return NextResponse.redirect(login);
 }
 

@@ -527,29 +527,54 @@ export async function patchManagedUser(
   if (!isKnownRole(target.role)) return { error: "Unknown role.", status: 400 };
   if (input.role && !isKnownRole(input.role)) return { error: "Unknown role.", status: 400 };
   const isSelf = actor.id === input.userId;
-  const canEdit = canEditUser(actor, target.role) || isSelf;
-  const canReset = canResetPassword(actor, target.role) || isSelf;
-  const wantsProfile =
+  const canEdit = canEditUser(actor, target.role);
+  const canReset = canResetPassword(actor, target.role);
+  const wantsPassword = Boolean(input.password);
+  const wantsRole = Boolean(input.role && input.role !== target.role);
+  const wantsActive = typeof input.active === "boolean";
+  const wantsPermissions =
+    input.permissionGrants !== undefined || input.permissionRevokes !== undefined;
+  const wantsProfileFields =
     Boolean(input.name) ||
     Boolean(input.email) ||
-    Boolean(input.role) ||
-    typeof input.active === "boolean" ||
     input.avatarUrl !== undefined ||
-    input.permissionGrants !== undefined ||
-    input.permissionRevokes !== undefined ||
     input.allowedLocationIds !== undefined;
-  if (wantsProfile && !canEdit) {
-    return { error: "You cannot edit this account.", status: 403 };
-  }
-  if (input.password && !canReset) {
-    return { error: "You cannot reset this password.", status: 403 };
-  }
-  if (!canEdit && !canReset) {
-    return { error: "You cannot edit this account.", status: 403 };
+
+  if (
+    isSelf &&
+    (wantsProfileFields || wantsRole || wantsActive || wantsPermissions)
+  ) {
+    return {
+      error: "Update your own profile from the Profile page.",
+      status: 403,
+    };
   }
 
-  if (input.role && input.role !== target.role && !canAssignRole(actor, input.role)) {
+  if ((wantsProfileFields || wantsPermissions) && !canEdit) {
+    return { error: "You cannot edit this account.", status: 403 };
+  }
+  if (wantsRole && !canAssignRole(actor, input.role!)) {
     return { error: "You cannot assign that role.", status: 403 };
+  }
+  if (wantsPassword && !canReset) {
+    return { error: "You cannot reset this password.", status: 403 };
+  }
+  if (
+    !wantsPassword &&
+    !wantsRole &&
+    !wantsActive &&
+    !wantsProfileFields &&
+    !wantsPermissions
+  ) {
+    return { error: "No changes provided.", status: 400 };
+  }
+  if (
+    !canEdit &&
+    !canReset &&
+    !wantsRole &&
+    !(wantsActive && canDeactivateUser(actor, target.role))
+  ) {
+    return { error: "You cannot edit this account.", status: 403 };
   }
 
   if (typeof input.active === "boolean" && input.active !== (target.active !== false)) {

@@ -928,6 +928,10 @@ export async function placeOrder(input: {
   items: Pick<CartItem, "productId" | "quantity">[];
   coupon?: string | null;
   delivery?: DeliveryAddress;
+  /** When set, activity log uses this actor (e.g. POS cashier) instead of the customer. */
+  activityActorUserId?: string;
+  activityAction?: "order.placed" | "pos.sale";
+  activityMetadata?: Record<string, unknown>;
 }) {
   if (!isDbConfigured()) {
     throw new Error("Database is not configured.");
@@ -949,6 +953,7 @@ export async function placeOrder(input: {
     if (input.fulfillment === "pickup" && !location.pickupAvailable) {
       throw new Error("Pickup is not available from this store.");
     }
+    // "pos" (in-store) sales are always allowed at any active location.
 
     const orderItems: Order["items"] = [];
     let subtotal = 0;
@@ -984,7 +989,12 @@ export async function placeOrder(input: {
     const order: Order = {
       id: orderId,
       date: new Date().toISOString().slice(0, 10),
-      status: input.fulfillment === "pickup" ? "ready" : "processing",
+      status:
+        input.fulfillment === "pos"
+          ? "delivered"
+          : input.fulfillment === "pickup"
+            ? "ready"
+            : "processing",
       items: orderItems,
       total,
       fulfillment: input.fulfillment,
@@ -1049,20 +1059,87 @@ export async function placeOrder(input: {
   }
 
   await recordActivity({
-    actorUserId: result.userId,
-    action: "order.placed",
+    actorUserId: input.activityActorUserId ?? result.userId,
+    action: input.activityAction ?? "order.placed",
     entityType: "order",
     entityId: result.order.id,
     locationId: result.order.locationId,
-    summary: `Placed ${result.order.fulfillment} order ${result.order.id} for $${result.order.total.toFixed(2)}`,
+    summary:
+      input.activityAction === "pos.sale"
+        ? `POS ${result.order.fulfillment} sale ${result.order.id} for $${result.order.total.toFixed(2)}`
+        : `Placed ${result.order.fulfillment} order ${result.order.id} for $${result.order.total.toFixed(2)}`,
     metadata: {
       itemCount: result.order.items.length,
       fulfillment: result.order.fulfillment,
       total: result.order.total,
+      customerUserId: result.userId,
+      ...input.activityMetadata,
     },
   });
 
   return result;
+}
+
+export async function placePosOrder(input: {
+  actorUserId: string;
+  locationId: string;
+  fulfillment: "pos" | "pickup" | "delivery";
+  items: Pick<CartItem, "productId" | "quantity">[];
+  customerName?: string;
+  customerEmail?: string;
+  customerPhone?: string;
+  coupon?: string | null;
+  delivery?: DeliveryAddress;
+  paymentMethod?: "cash" | "card" | "other";
+}) {
+  if (!isDbConfigured()) {
+    throw new Error("Database is not configured.");
+  }
+
+  const staff = await prisma.user.findUnique({ where: { id: input.actorUserId } });
+  if (!staff || !staff.active) {
+    throw new Error("Signed-in account is not available for POS.");
+  }
+
+  const email = input.customerEmail?.trim().toLowerCase();
+  const walkIn = !email;
+  let customerUserId: string | undefined = walkIn ? staff.id : undefined;
+  let customerName =
+    input.customerName?.trim() || (walkIn ? "Walk-in Guest" : "");
+
+  if (email) {
+    const existing = await prisma.user.findUnique({ where: { email } });
+    if (existing) {
+      if (!existing.active) {
+        throw new Error("That customer account is deactivated.");
+      }
+      customerUserId = existing.id;
+      if (!customerName) customerName = existing.name;
+    } else if (!customerName) {
+      customerName = email.split("@")[0] || "Customer";
+    }
+  }
+
+  return placeOrder({
+    email: email || staff.email,
+    name: customerName,
+    phone: input.customerPhone,
+    userId: customerUserId,
+    locationId: input.locationId,
+    fulfillment: input.fulfillment,
+    items: input.items,
+    coupon: input.coupon,
+    delivery: input.delivery,
+    activityActorUserId: staff.id,
+    activityAction: "pos.sale",
+    activityMetadata: {
+      paymentMethod: input.paymentMethod ?? "cash",
+      walkIn,
+      customerPhone: input.customerPhone ?? null,
+      cashierId: staff.id,
+      cashierName: staff.name,
+    },
+  });
 }
 
 export async function createOrder(userId: string, order: Order) {
@@ -1100,12 +1177,22 @@ export async function createOrder(userId: string, order: Order) {
 
 const CANCELLABLE_STATUSES = new Set(["processing", "ready", "shipped"]);
 
-export async function cancelOrder(orderId: string, userId: string) {
+export async function cancelOrder(
+  orderId: string,
+  actorUserId: string,
+  opts?: {
+    /** When set, cancel any order owned by this user (staff path uses the order's owner). */
+    asStaffForOwnerId?: string;
+    actorName?: string;
+  },
+) {
   if (!isDbConfigured()) return null;
+
+  const ownerUserId = opts?.asStaffForOwnerId ?? actorUserId;
 
   const cancelled = await prisma.$transaction(async (tx) => {
     const order = await tx.order.findFirst({
-      where: { id: orderId, userId },
+      where: { id: orderId, userId: ownerUserId },
       include: { items: true },
     });
     if (!order || !CANCELLABLE_STATUSES.has(order.status)) return null;
@@ -1137,14 +1224,21 @@ export async function cancelOrder(orderId: string, userId: string) {
   });
 
   if (cancelled) {
+    const who = opts?.actorName || "Customer";
     await recordActivity({
-      actorUserId: userId,
+      actorUserId,
       action: "order.cancelled",
       entityType: "order",
       entityId: cancelled.id,
       locationId: cancelled.locationId,
-      summary: `Cancelled order ${cancelled.id}`,
-      metadata: { total: cancelled.total, fulfillment: cancelled.fulfillment },
+      summary: opts?.asStaffForOwnerId
+        ? `${who} cancelled order ${cancelled.id}`
+        : `Cancelled order ${cancelled.id}`,
+      metadata: {
+        total: cancelled.total,
+        fulfillment: cancelled.fulfillment,
+        staff: Boolean(opts?.asStaffForOwnerId),
+      },
     });
   }
 

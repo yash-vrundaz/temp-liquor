@@ -73,7 +73,9 @@ export type ActivityAction =
   | "auth.login"
   | "auth.signup"
   | "order.placed"
+  | "pos.sale"
   | "order.cancelled"
+  | "order.status"
   | "inventory.set"
   | "inventory.adjust"
   | "inventory.restock"
@@ -202,7 +204,7 @@ export type Review = {
 export type CartItem = {
   productId: string;
   quantity: number;
-  fulfillment: "delivery" | "pickup";
+  fulfillment: "delivery" | "pickup" | "pos";
 };
 
 export type SavedItem = {
@@ -242,13 +244,15 @@ export type Driver = {
   photoUrl?: string;
 };
 
+export type OrderFulfillment = "delivery" | "pickup" | "pos";
+
 export type Order = {
   id: string;
   date: string;
   status: "processing" | "shipped" | "ready" | "delivered" | "cancelled";
   items: { productId: string; quantity: number; price: number }[];
   total: number;
-  fulfillment: "delivery" | "pickup";
+  fulfillment: OrderFulfillment;
   locationId: string;
   tracking?: string;
   delivery?: DeliveryAddress;

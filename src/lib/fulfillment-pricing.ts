@@ -41,10 +41,10 @@ export function pricingFromLocation(
 
 export function calculateShipping(
   subtotal: number,
-  fulfillment: "delivery" | "pickup",
+  fulfillment: "delivery" | "pickup" | "pos",
   location?: Partial<LocationPricingFields> | null,
 ) {
-  if (fulfillment === "pickup") return 0;
+  if (fulfillment === "pickup" || fulfillment === "pos") return 0;
   const pricing = pricingFromLocation(location);
   if (!pricing.deliveryAvailable) return 0;
   if (pricing.deliveryFreeMinimum > 0 && subtotal >= pricing.deliveryFreeMinimum) return 0;

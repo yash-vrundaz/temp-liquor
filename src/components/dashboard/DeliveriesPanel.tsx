@@ -1,9 +1,12 @@
 "use client";
 
 import { useCallback, useEffect, useMemo, useState } from "react";
-import { usePathname, useRouter, useSearchParams } from "next/navigation";
+import { usePathname, useRouter } from "next/navigation";
+import { dashboardPath, parseDashboardPath } from "@/lib/dashboard/routes";
 import { Contact, LayoutGrid, Table2, Truck } from "lucide-react";
 import { DriversPanel } from "@/components/dashboard/DriversPanel";
+import { PanelLoading } from "@/components/dashboard/DashboardLoading";
+import { AccessDenied } from "@/components/dashboard/AccessDenied";
 import { useUserStore } from "@/store/user";
 import { isDbConnected } from "@/lib/runtime-data";
 import { apiAssignDelivery, apiFetchDeliveries, apiUpdateDeliveryStatus } from "@/lib/api-mutations";
@@ -86,24 +89,33 @@ const selectClass =
 export function DeliveriesPanel() {
   const router = useRouter();
   const pathname = usePathname();
-  const searchParams = useSearchParams();
+  const profile = useUserStore((s) => s.profile);
+  const canView = hasPermission(profile, "deliveries.view");
   const section: DeliveriesSection =
-    searchParams.get("section") === "drivers" ? "drivers" : "deliveries";
+    parseDashboardPath(pathname).deliveriesSection === "drivers"
+      ? "drivers"
+      : "deliveries";
 
   const setSection = useCallback(
     (next: DeliveriesSection) => {
-      const params = new URLSearchParams(searchParams.toString());
-      params.set("tab", "deliveries");
-      if (next === "drivers") params.set("section", "drivers");
-      else params.delete("section");
-      const qs = params.toString();
-      router.replace(qs ? `${pathname}?${qs}` : pathname, { scroll: false });
+      router.push(
+        next === "drivers"
+          ? dashboardPath("deliveries", { drivers: true })
+          : dashboardPath("deliveries"),
+        { scroll: false },
+      );
     },
-    [pathname, router, searchParams],
+    [router],
   );
 
+  if (!canView) {
+    return (
+      <AccessDenied message="Deliveries are not enabled for this account. Ask an owner to grant View deliveries." />
+    );
+  }
+
   return (
-    <section className="mt-6 min-w-0">
+    <section className="mt-0 min-w-0">
       <div
         className="-mx-3 h-scroll border-b border-white/10 px-3 sm:mx-0 sm:px-0"
         role="tablist"
@@ -146,18 +158,21 @@ function DeliveriesQueuePanel() {
   const localDrivers = useDeliveryStore((s) => s.drivers);
   const [drivers, setDrivers] = useState<Driver[]>(seedDrivers);
   const [orders, setOrders] = useState<Order[]>([]);
+  const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
   const [busy, setBusy] = useState<string | null>(null);
   const [viewMode, setViewMode] = useState<ViewMode>("cards");
   const { sortKey, sortDir, toggleSort } = useTableSort<SortKey>("status", "asc", ["status"]);
 
   const load = async () => {
+    setLoading(true);
     if (!isDbConnected()) {
       const fallback = demoUser.orders
         .filter((order) => order.fulfillment === "delivery" && order.status !== "cancelled")
         .map((order) => enrich(order));
       setDrivers(localDrivers);
       setOrders(fallback);
+      setLoading(false);
       return;
     }
     try {
@@ -167,6 +182,8 @@ function DeliveriesQueuePanel() {
       setError("");
     } catch (err) {
       setError(err instanceof Error ? err.message : "Could not load deliveries.");
+    } finally {
+      setLoading(false);
     }
   };
 
@@ -196,6 +213,7 @@ function DeliveriesQueuePanel() {
   }, [orders, sortKey, sortDir]);
 
   const assign = async (orderId: string, driverId: string) => {
+    if (!canManage) return;
     setBusy(orderId);
     try {
       if (isDbConnected()) {
@@ -212,6 +230,7 @@ function DeliveriesQueuePanel() {
   };
 
   const advance = async (order: Order) => {
+    if (!canManage) return;
     const current = order.deliveryStatus ?? "unassigned";
     const next = NEXT_STATUS[current];
     if (!next) return;
@@ -356,11 +375,14 @@ function DeliveriesQueuePanel() {
       </div>
       {error ? <p className="mt-4 text-sm text-red-300">{error}</p> : null}
 
-      {orders.length === 0 ? (
+      {loading ? (
+        <PanelLoading label="Loading deliveries…" />
+      ) : orders.length === 0 ? (
         <p className="mt-6 text-sm text-muted">No delivery orders yet.</p>
       ) : viewMode === "table" ? (
-        <div className={`mt-6 ${tableWrapClass}`}>
-          <table className="w-full min-w-[56rem] text-left text-sm">
+        <>
+          <div className={`mt-6 hidden lg:block ${tableWrapClass}`}>
+            <table className="w-full min-w-[56rem] text-left text-sm">
             <thead>
               <tr className={tableHeadRowClass}>
                 <SortableTh
@@ -432,7 +454,29 @@ function DeliveriesQueuePanel() {
               })}
             </tbody>
           </table>
-        </div>
+          </div>
+          <div className="mt-6 space-y-4 lg:hidden">
+            {sortedOrders.map((order) => {
+              const loc = getAllLocations().find((item) => item.id === order.locationId);
+              const status = order.deliveryStatus ?? "unassigned";
+              return (
+                <article key={order.id} className="glass border border-white/10 p-4 sm:p-5">
+                  <div className="flex flex-col gap-4">
+                    <div className="min-w-0">
+                      <p className="text-[10px] uppercase tracking-[0.18em] text-gold">
+                        {order.id} · {loc?.shortName ?? order.locationId}
+                      </p>
+                      <p className="mt-1 font-display text-xl text-cream">{STATUS_LABEL[status]}</p>
+                      <p className="mt-1 text-sm text-muted">{formatAddress(order)}</p>
+                      <p className="mt-2 text-sm text-gold">{formatPrice(order.total)}</p>
+                    </div>
+                    {renderActions(order)}
+                  </div>
+                </article>
+              );
+            })}
+          </div>
+        </>
       ) : (
         <div className="mt-6 space-y-4">
           {sortedOrders.map((order) => {

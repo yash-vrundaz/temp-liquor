@@ -78,27 +78,35 @@ export function ProfilePanel() {
   };
 
   return (
-    <section className="mt-6 min-w-0">
+    <section className="mt-0 min-w-0">
       <div className="flex flex-col gap-3 border-b border-white/10 pb-4 sm:flex-row sm:items-end sm:justify-between sm:gap-4 sm:pb-5">
         <div className="min-w-0">
-          <h2 className="font-display text-2xl text-cream sm:text-3xl">Profile</h2>
-          <p className="mt-1 text-sm text-muted">
-            Update your photo, account details, and password.
+          <p className="hidden text-[10px] uppercase tracking-[0.22em] text-gold lg:flex lg:items-center lg:gap-2">
+            <Shield size={12} className="text-gold" />
+            Profile
+          </p>
+          <h2 className="hidden font-display text-3xl text-cream lg:mt-2 lg:block xl:text-4xl">
+            Profile
+          </h2>
+          <p className="max-w-2xl text-sm text-muted lg:mt-2">
+            Update your photo, name, email, and password.
           </p>
         </div>
-        <Button
-          type="button"
-          size="sm"
-          variant="ghost"
-          className="w-full shrink-0 sm:w-auto"
-          onClick={async () => {
-            await logout();
-            window.location.assign("/login");
-          }}
-        >
-          <LogOut size={14} />
-          Sign out
-        </Button>
+        <div className="flex shrink-0 flex-wrap gap-2 sm:justify-end">
+          <Button
+            type="button"
+            size="sm"
+            variant="ghost"
+            className="w-full shrink-0 sm:w-auto"
+            onClick={async () => {
+              await logout();
+              window.location.assign("/login");
+            }}
+          >
+            <LogOut size={14} />
+            Sign out
+          </Button>
+        </div>
       </div>
 
       <div className="glass mt-4 overflow-hidden border border-white/10 sm:mt-6">

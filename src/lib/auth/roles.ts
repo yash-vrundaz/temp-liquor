@@ -26,8 +26,8 @@ export const ROLE_LABELS: Record<UserRole, string> = {
 
 export const ROLE_BLURBS: Record<UserRole, string> = {
   customer: "Shop, checkout, and manage a personal account.",
-  staff: "Count stock, restock shelves, and view store activity.",
-  admin: "Run catalog, inventory, users, and store operations.",
+  staff: "Ring POS sales, manage orders, count stock, and run deliveries.",
+  admin: "Full dashboard ops: POS, orders, catalog, inventory, users, and locations.",
   owner: "Full access, including owner accounts and store reset.",
 };
 

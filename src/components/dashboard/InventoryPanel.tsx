@@ -2,8 +2,10 @@
 
 import { useEffect, useMemo, useRef, useState } from "react";
 import Image from "next/image";
-import { ChevronDown, Eye, EyeOff, Package, Pencil, RotateCcw, Search, Trash2 } from "lucide-react";
+import { useRouter } from "next/navigation";
+import { ChevronDown, Eye, EyeOff, Package, Pencil, RotateCcw, Search, Tags, Trash2 } from "lucide-react";
 import { getAllLocations, getLocationById } from "@/data/locations";
+import { dashboardPath } from "@/lib/dashboard/routes";
 import { getCategories } from "@/data/categories";
 import { getAllProducts, getProductById } from "@/data/products";
 import { useInventoryStore } from "@/store/inventory";
@@ -16,6 +18,7 @@ import {
 import type { CategorySlug, Product } from "@/types";
 import { BottleForm } from "@/components/dashboard/AddBottleForm";
 import { CategoriesPanel } from "@/components/dashboard/CategoriesPanel";
+import { AccessDenied } from "@/components/dashboard/AccessDenied";
 import { Button } from "@/components/ui/Button";
 import { Input } from "@/components/ui/Input";
 import { Modal } from "@/components/ui/Modal";
@@ -194,6 +197,7 @@ export function InventoryPanel({
   locations,
   initialView = "stock",
 }: Props) {
+  const router = useRouter();
   const profile = useUserStore((s) => s.profile);
   const canAdjust = hasPermission(profile, "inventory.adjust");
   const canRestock = hasPermission(profile, "inventory.restock");
@@ -216,10 +220,37 @@ export function InventoryPanel({
   const catalogRevision = useCatalogStore((s) => s.revision);
   const removeBottle = useCatalogStore((s) => s.removeBottle);
   const custom = useCatalogStore((s) => s.custom);
+  const canViewStock = hasPermission(profile, "inventory.view");
 
   const [view, setView] = useState<InventoryView>(
-    initialView === "categories" && canManageCategories ? "categories" : "stock",
+    !canViewStock && canManageCategories
+      ? "categories"
+      : initialView === "categories" && canManageCategories
+        ? "categories"
+        : "stock",
   );
+
+  useEffect(() => {
+    if (!canViewStock && canManageCategories) {
+      setView("categories");
+      return;
+    }
+    const next =
+      initialView === "categories" && canManageCategories ? "categories" : "stock";
+    setView(next);
+  }, [initialView, canManageCategories, canViewStock]);
+
+  const setInventoryView = (next: InventoryView) => {
+    if (next === "stock" && !canViewStock) return;
+    if (next === "categories" && !canManageCategories) return;
+    setView(next);
+    router.replace(
+      next === "categories"
+        ? dashboardPath("inventory", { categories: true })
+        : dashboardPath("inventory"),
+      { scroll: false },
+    );
+  };
   const [query, setQuery] = useState("");
   const [stockFilter, setStockFilter] = useState<StockFilter>("all");
   const [category, setCategory] = useState<CategorySlug | "all">("all");
@@ -230,19 +261,22 @@ export function InventoryPanel({
   const [pageSize, setPageSize] = useState(10);
   const stores = locations?.length ? locations : getAllLocations();
 
-  // Always one store tab — never list the same SKU across all branches
+  // Always one store — never list the same SKU across all branches
   const storeId =
     locationId !== "all" && stores.some((loc) => loc.id === locationId)
       ? locationId
-      : stores[0]?.id ?? getAllLocations()[0]!.id;
+      : stores[0]?.id ?? "";
 
   useEffect(() => {
+    if (!storeId) return;
     if (locationId === "all" || !stores.some((loc) => loc.id === locationId)) {
       onLocationChange?.(storeId);
     }
   }, [locationId, storeId, onLocationChange, stores]);
 
-  const activeLocation = getLocationById(storeId) ?? stores[0] ?? getAllLocations()[0]!;
+  const activeLocation = storeId
+    ? getLocationById(storeId) ?? stores[0] ?? null
+    : null;
 
   const rows = useMemo(() => {
     const catalog = getAllProducts();
@@ -339,23 +373,44 @@ export function InventoryPanel({
 
   const selectStore = (id: string) => onLocationChange?.(id);
   const showCategories = view === "categories" && canManageCategories;
+  const canOpenInventory = canViewStock || canManageCategories;
+
+  if (!canOpenInventory) {
+    return (
+      <AccessDenied message="Inventory is not enabled for this account. Ask an owner to grant inventory or catalog access." />
+    );
+  }
+
+  if (!storeId || !activeLocation) {
+    return (
+      <div className="rounded-sm border border-dashed border-white/15 px-4 py-14 text-center">
+        <p className="text-sm text-cream">No stores available</p>
+        <p className="mt-1 text-sm text-muted">
+          Ask an owner to grant location access for inventory.
+        </p>
+      </div>
+    );
+  }
 
   return (
-    <section className="mt-6">
-      {/* Header */}
-      <div className="flex flex-col gap-4 border-b border-white/10 pb-5 sm:flex-row sm:items-end sm:justify-between">
+    <section className="mt-0">
+      <div className="flex flex-col gap-3 border-b border-white/10 pb-4 sm:flex-row sm:items-end sm:justify-between sm:gap-4 sm:pb-5">
         <div className="min-w-0">
-          <h2 className="font-display text-2xl text-cream sm:text-3xl">
+          <p className="hidden text-[10px] uppercase tracking-[0.22em] text-gold lg:flex lg:items-center lg:gap-2">
+            <Package size={12} className="text-gold" />
+            Inventory
+          </p>
+          <h2 className="hidden font-display text-3xl text-cream lg:mt-2 lg:block xl:text-4xl">
             Inventory
           </h2>
-          <p className="mt-1 text-sm text-muted">
+          <p className="max-w-2xl text-sm text-muted lg:mt-2">
             {showCategories
-              ? "Shop collections used when adding and filtering bottles"
-              : "One store at a time · each bottle listed once"}
+              ? "Shop collections used when adding and filtering bottles."
+              : "Manage bottle counts, categories, restock, and products per store."}
           </p>
         </div>
         {!showCategories ? (
-          <div className="flex flex-wrap gap-2">
+          <div className="flex shrink-0 flex-wrap gap-2 sm:justify-end">
             {canAddBottle && !editor && (
               <Button size="sm" onClick={() => setEditor("new")}>
                 Add bottle
@@ -380,31 +435,37 @@ export function InventoryPanel({
         ) : null}
       </div>
 
-      {canManageCategories ? (
+      {canManageCategories || canViewStock ? (
         <div
-          className="mt-5 -mx-3 h-scroll border-b border-white/10 px-3 sm:mx-0 sm:px-0"
+          className="mt-5 -mx-3 h-scroll border-b border-white/10 px-3 sm:-mx-5 sm:px-5 md:mx-0 md:px-0"
           role="tablist"
           aria-label="Inventory sections"
         >
           <div className="flex min-w-max gap-1">
             {(
               [
-                { id: "stock" as const, label: "Stock" },
-                { id: "categories" as const, label: "Categories" },
+                ...(canViewStock
+                  ? [{ id: "stock" as const, label: "Stock", icon: Package }]
+                  : []),
+                ...(canManageCategories
+                  ? [{ id: "categories" as const, label: "Categories", icon: Tags }]
+                  : []),
               ] as const
             ).map((tab) => {
               const active = view === tab.id;
+              const Icon = tab.icon;
               return (
                 <button
                   key={tab.id}
                   type="button"
                   role="tab"
                   aria-selected={active}
-                  onClick={() => setView(tab.id)}
-                  className={`relative min-h-11 px-3 py-2.5 text-[11px] uppercase tracking-[0.16em] transition ${
+                  onClick={() => setInventoryView(tab.id)}
+                  className={`relative inline-flex min-h-11 items-center gap-2 px-3 py-2.5 text-[11px] uppercase tracking-[0.16em] transition ${
                     active ? "text-cream" : "text-muted hover:text-cream"
                   }`}
                 >
+                  <Icon size={14} className={active ? "text-gold" : ""} />
                   {tab.label}
                   {active ? (
                     <span className="absolute inset-x-2 bottom-0 h-px bg-(--gold)" />
@@ -635,7 +696,7 @@ export function InventoryPanel({
                             storeId,
                             product.id,
                             d,
-                            d > 0 ? "restock" : "adjustment",
+                            d > 0 && canRestock ? "restock" : "adjustment",
                           )
                         }
                       />
@@ -741,7 +802,7 @@ export function InventoryPanel({
                             storeId,
                             product.id,
                             d,
-                            d > 0 ? "restock" : "adjustment",
+                            d > 0 && canRestock ? "restock" : "adjustment",
                           )
                         }
                       />

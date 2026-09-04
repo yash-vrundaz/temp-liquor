@@ -21,6 +21,7 @@ import { useBranchStore } from "@/store/branch";
 import { useUserStore } from "@/store/user";
 import { isStaffRole } from "@/lib/auth/roles";
 import { getAllLocations } from "@/data/locations";
+import { accessibleLocations } from "@/lib/auth/location-access";
 import { searchAll } from "@/lib/search";
 import { formatPrice } from "@/lib/utils";
 import { AccountMenu } from "@/components/layout/AccountMenu";
@@ -41,6 +42,8 @@ export function Header() {
   const [branchOpen, setBranchOpen] = useState(false);
   const [accountOpen, setAccountOpen] = useState(false);
   const accountRef = useRef<HTMLDivElement>(null);
+  const branchMenuRef = useRef<HTMLDivElement>(null);
+  const branchButtonRef = useRef<HTMLButtonElement>(null);
   const [query, setQuery] = useState("");
   const [listening, setListening] = useState(false);
   const count = useCartStore((s) => s.items.reduce((n, i) => n + i.quantity, 0));
@@ -54,7 +57,12 @@ export function Header() {
   );
   const logout = useUserStore((s) => s.logout);
   const onDashboard = pathname.startsWith("/dashboard");
-  const branch = getAllLocations().find((l) => l.id === branchId) ?? getAllLocations()[0];
+  const branchOptions =
+    isLoggedIn && isStaff ? accessibleLocations(profile) : getAllLocations();
+  const branch =
+    branchOptions.find((l) => l.id === branchId) ??
+    branchOptions[0] ??
+    getAllLocations()[0];
   const results = query.trim() ? searchAll(query) : null;
 
   const handleSignOut = async () => {
@@ -64,6 +72,13 @@ export function Header() {
     setAccountOpen(false);
     window.location.assign("/login");
   };
+
+  useEffect(() => {
+    if (!isLoggedIn || !isStaff) return;
+    const options = accessibleLocations(profile);
+    if (options.some((loc) => loc.id === branchId)) return;
+    if (options[0]) setBranch(options[0].id);
+  }, [branchId, isLoggedIn, isStaff, profile, setBranch]);
 
   useEffect(() => {
     const onScroll = () => setScrolled(window.scrollY > 24);
@@ -95,6 +110,25 @@ export function Header() {
       document.removeEventListener("keydown", onKey);
     };
   }, [accountOpen]);
+
+  useEffect(() => {
+    if (!branchOpen) return;
+    const onPointer = (event: MouseEvent) => {
+      const target = event.target as Node;
+      if (branchMenuRef.current?.contains(target)) return;
+      if (branchButtonRef.current?.contains(target)) return;
+      setBranchOpen(false);
+    };
+    const onKey = (event: KeyboardEvent) => {
+      if (event.key === "Escape") setBranchOpen(false);
+    };
+    document.addEventListener("mousedown", onPointer);
+    document.addEventListener("keydown", onKey);
+    return () => {
+      document.removeEventListener("mousedown", onPointer);
+      document.removeEventListener("keydown", onKey);
+    };
+  }, [branchOpen]);
 
   useEffect(() => {
     if (!open) return;
@@ -152,7 +186,7 @@ export function Header() {
             : "bg-transparent py-3 sm:py-5",
         )}
       >
-        <div className="mx-auto grid max-w-7xl grid-cols-[auto_minmax(0,1fr)_auto] items-center gap-1.5 px-3 sm:gap-3 sm:px-4 md:px-8 lg:grid-cols-[minmax(0,auto)_minmax(0,1fr)_auto] lg:gap-6">
+        <div className="grid w-full grid-cols-[auto_minmax(0,1fr)_auto] items-center gap-1.5 px-3 sm:gap-3 sm:px-5 md:px-6 lg:grid-cols-[minmax(0,auto)_minmax(0,1fr)_auto] lg:gap-6 lg:px-8 xl:px-10 2xl:px-12">
           <button
             className="relative z-10 inline-flex min-h-11 min-w-11 shrink-0 items-center justify-center text-[var(--cream)] touch-manipulation lg:hidden"
             aria-label="Open menu"
@@ -198,15 +232,20 @@ export function Header() {
 
           <div className="relative z-10 flex shrink-0 items-center justify-end gap-0.5 sm:gap-1.5 md:gap-2">
             <button
+              type="button"
+              ref={branchButtonRef}
               onClick={() => {
                 setBranchOpen((v) => !v);
                 setAccountOpen(false);
               }}
               className="hidden items-center gap-1.5 rounded-sm border border-white/10 px-2.5 py-2 text-[10px] uppercase tracking-[0.14em] text-[var(--muted)] hover:border-[var(--gold)]/40 hover:text-[var(--gold)] lg:flex xl:gap-2"
               aria-label="Select store branch"
+              aria-expanded={branchOpen}
+              aria-haspopup="listbox"
+              aria-controls="header-branch-menu"
             >
               <MapPin size={12} />
-              <span className="max-w-[5rem] truncate lg:max-w-[7rem] xl:max-w-none">
+              <span className="max-w-[6rem] truncate xl:max-w-[10rem] 2xl:max-w-none">
                 {branch.shortName}
               </span>
             </button>
@@ -279,6 +318,10 @@ export function Header() {
       <AnimatePresence>
         {branchOpen && (
           <motion.div
+            ref={branchMenuRef}
+            id="header-branch-menu"
+            role="listbox"
+            aria-label="Store branches"
             initial={{ opacity: 0, y: -8 }}
             animate={{ opacity: 1, y: 0 }}
             exit={{ opacity: 0, y: -8 }}
@@ -287,9 +330,12 @@ export function Header() {
             <p className="mb-3 text-[10px] uppercase tracking-[0.2em] text-[var(--gold)]">
               Select Branch
             </p>
-            {getAllLocations().map((loc) => (
+            {branchOptions.map((loc) => (
               <button
                 key={loc.id}
+                type="button"
+                role="option"
+                aria-selected={loc.id === branchId}
                 onClick={() => {
                   setBranch(loc.id);
                   setBranchOpen(false);
@@ -500,7 +546,7 @@ export function Header() {
                   : ""}
               </p>
               <div className="space-y-2 pb-8">
-                {getAllLocations().map((loc) => (
+                {branchOptions.map((loc) => (
                   <button
                     key={loc.id}
                     type="button"

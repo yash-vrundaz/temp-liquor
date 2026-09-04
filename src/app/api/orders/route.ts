@@ -1,8 +1,42 @@
 import { NextResponse } from "next/server";
 import { cancelOrder, fetchInventoryState, placeOrder, StockConflictError } from "@/lib/db/queries";
-import { cancelOrderSchema, placeOrderSchema } from "@/lib/db/validators";
-import { getRequestUser, requireUser } from "@/lib/auth/require";
+import {
+  listStoreOrders,
+  staffCancelOrder,
+  staffUpdateOrderStatus,
+} from "@/lib/db/orders-admin";
+import { cancelOrderSchema, patchOrderSchema, placeOrderSchema } from "@/lib/db/validators";
+import { getRequestUser, requirePermission, requireUser } from "@/lib/auth/require";
+import { hasPermission } from "@/lib/auth/permissions";
 import { clientIp, rateLimit, tooManyRequests } from "@/lib/rate-limit";
+import type { Order } from "@/types";
+
+export async function GET(request: Request) {
+  try {
+    const { user, error } = await requirePermission("orders.view");
+    if (error) return error;
+
+    const url = new URL(request.url);
+    const locationId = url.searchParams.get("locationId") || undefined;
+    const status = (url.searchParams.get("status") || "all") as Order["status"] | "all";
+    const fulfillment = (url.searchParams.get("fulfillment") || "all") as
+      | Order["fulfillment"]
+      | "all";
+    const q = url.searchParams.get("q") || undefined;
+
+    const orders = await listStoreOrders(user, {
+      locationId,
+      status,
+      fulfillment,
+      q,
+    });
+
+    return NextResponse.json({ orders });
+  } catch (error) {
+    console.error("[GET /api/orders]", error);
+    return NextResponse.json({ error: "Failed to load orders." }, { status: 500 });
+  }
+}
 
 export async function POST(request: Request) {
   try {
@@ -58,10 +92,67 @@ export async function PATCH(request: Request) {
   try {
     const { user, error } = await requireUser();
     if (error) return error;
-    const parsed = cancelOrderSchema.safeParse(await request.json());
+
+    const body = await request.json();
+    const patchParsed = patchOrderSchema.safeParse(body);
+    const legacyParsed = cancelOrderSchema.safeParse(body);
+    const parsed = patchParsed.success
+      ? patchParsed
+      : legacyParsed.success
+        ? { success: true as const, data: { ...legacyParsed.data, action: "cancel" as const } }
+        : patchParsed;
+
     if (!parsed.success) {
-      return NextResponse.json({ error: "Invalid cancel payload." }, { status: 400 });
+      return NextResponse.json({ error: "Invalid order update." }, { status: 400 });
     }
+
+    const action = parsed.data.action ?? "cancel";
+
+    if (action === "status") {
+      if (!hasPermission(user, "orders.manage")) {
+        return NextResponse.json({ error: "Order management is not allowed." }, { status: 403 });
+      }
+      if (!parsed.data.status) {
+        return NextResponse.json({ error: "Status is required." }, { status: 400 });
+      }
+      try {
+        const order = await staffUpdateOrderStatus(parsed.data.orderId, parsed.data.status, user);
+        if (!order) {
+          return NextResponse.json({ error: "Order not found." }, { status: 404 });
+        }
+        return NextResponse.json({ order });
+      } catch (err) {
+        const message = err instanceof Error ? err.message : "Failed to update order.";
+        const status = message.includes("do not have")
+          ? 403
+          : message.includes("not found")
+            ? 404
+            : message.includes("Deliveries") || message.includes("Invalid") || message.includes("Cancelled")
+              ? 400
+              : 500;
+        return NextResponse.json({ error: message }, { status });
+      }
+    }
+
+    // Cancel — staff can cancel any accessible store order; customers cancel their own.
+    if (hasPermission(user, "orders.manage")) {
+      try {
+        const order = await staffCancelOrder(parsed.data.orderId, user);
+        if (!order) {
+          return NextResponse.json(
+            { error: "Order not found or cannot be cancelled." },
+            { status: 404 },
+          );
+        }
+        const inventory = await fetchInventoryState();
+        return NextResponse.json({ order, inventory });
+      } catch (err) {
+        const message = err instanceof Error ? err.message : "Failed to cancel order.";
+        const status = message.includes("do not have") ? 403 : 500;
+        return NextResponse.json({ error: message }, { status });
+      }
+    }
+
     const order = await cancelOrder(parsed.data.orderId, user.id);
     if (!order) {
       return NextResponse.json(
@@ -73,6 +164,6 @@ export async function PATCH(request: Request) {
     return NextResponse.json({ order, inventory });
   } catch (error) {
     console.error("[PATCH /api/orders]", error);
-    return NextResponse.json({ error: "Failed to cancel order." }, { status: 500 });
+    return NextResponse.json({ error: "Failed to update order." }, { status: 500 });
   }
 }

@@ -74,9 +74,15 @@ export function UsersPanel() {
       .map((r) => r.slug);
     return [...builtIn, ...custom];
   }, [actor, customRoles]);
-  const canCreate = hasPermission(actor, "users.create");
+  const canCreate =
+    hasPermission(actor, "users.create") && assignableRoles.length > 0;
   const canAssign = hasPermission(actor, "users.assign_roles");
   const canCustomizePermissions = hasPermission(actor, "users.edit");
+  const canManageRoles = canAssign;
+
+  useEffect(() => {
+    if (view === "permissions" && !canManageRoles) setView("directory");
+  }, [view, canManageRoles]);
 
   const load = async (pageOverride?: number) => {
     const activePage = pageOverride ?? page;
@@ -214,16 +220,21 @@ export function UsersPanel() {
   };
 
   return (
-    <section className="mt-6">
-      <div className="flex flex-col gap-4 border-b border-white/10 pb-5 sm:flex-row sm:items-end sm:justify-between">
+    <section className="mt-0">
+      <div className="flex flex-col gap-3 border-b border-white/10 pb-4 sm:flex-row sm:items-end sm:justify-between sm:gap-4 sm:pb-5">
         <div className="min-w-0">
-          <h2 className="font-display text-2xl text-cream sm:text-3xl">Users</h2>
-          <p className="mt-1 text-sm text-muted">
-            Manage accounts in the directory, or review role defaults. Custom access can be granted
-            or removed for one user without changing their role.
+          <p className="hidden text-[10px] uppercase tracking-[0.22em] text-gold lg:flex lg:items-center lg:gap-2">
+            <Users size={12} className="text-gold" />
+            Users
+          </p>
+          <h2 className="hidden font-display text-3xl text-cream lg:mt-2 lg:block xl:text-4xl">
+            Users
+          </h2>
+          <p className="max-w-2xl text-sm text-muted lg:mt-2">
+            Create accounts, assign roles, store access, and permissions.
           </p>
         </div>
-        <div className="flex flex-wrap gap-2">
+        <div className="flex shrink-0 flex-wrap gap-2 sm:justify-end">
           <Button size="sm" variant="secondary" onClick={() => void load()} disabled={loading}>
             <RefreshCw size={14} className={loading ? "animate-spin" : ""} />
             Refresh
@@ -244,7 +255,7 @@ export function UsersPanel() {
       </div>
 
       <div
-        className="mt-5 -mx-3 h-scroll border-b border-white/10 px-3 sm:mx-0 sm:px-0"
+        className="mt-5 -mx-3 h-scroll border-b border-white/10 px-3 sm:-mx-5 sm:px-5 md:mx-0 md:px-0"
         role="tablist"
         aria-label="Users sections"
       >
@@ -254,20 +265,22 @@ export function UsersPanel() {
           label="Directory"
           onClick={() => setView("directory")}
         />
-        <ViewTab
-          active={view === "permissions"}
-          icon={ShieldCheck}
-          label="Roles"
-          shortLabel="Roles"
-          onClick={() => setView("permissions")}
-        />
+        {canManageRoles ? (
+          <ViewTab
+            active={view === "permissions"}
+            icon={ShieldCheck}
+            label="Roles"
+            shortLabel="Roles"
+            onClick={() => setView("permissions")}
+          />
+        ) : null}
       </div>
 
       {!isDbConnected() ? (
         <ConnectionNotice className="mt-5" feature="manage team accounts" />
       ) : null}
 
-      {view === "permissions" ? (
+      {view === "permissions" && canManageRoles ? (
         <CustomRolesPanel highlight={actor.role} />
       ) : (
         <>
@@ -546,8 +559,8 @@ function UserActions({
   onResetPassword: () => void;
   compact?: boolean;
 }) {
-  const canEdit = canEditUser(actor, user.role) || user.id === actorId;
-  const canReset = canResetPassword(actor, user.role) || user.id === actorId;
+  const canEdit = canEditUser(actor, user.role);
+  const canReset = canResetPassword(actor, user.role);
   const showRoleSelect =
     !compact && user.id !== actorId && canAssign && canAssignRole(actor, user.role);
   const showAccessToggle =

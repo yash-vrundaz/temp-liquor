@@ -1,5 +1,5 @@
 import { NextResponse } from "next/server";
-import { requirePermission, requireUser } from "@/lib/auth/require";
+import { requireAnyPermission, requirePermission, requireUser } from "@/lib/auth/require";
 import { hasAnyPermission } from "@/lib/auth/permissions";
 import { createUserSchema, patchUserSchema } from "@/lib/db/validators";
 import { createManagedUser, listManagedUsers, patchManagedUser } from "@/lib/db/users";
@@ -16,7 +16,12 @@ export async function GET(request: Request) {
       limit: Number(searchParams.get("limit") ?? 10),
       offset: Number(searchParams.get("offset") ?? 0),
       sortKey: searchParams.get("sortKey") ?? undefined,
-      sortDir: searchParams.get("sortDir") === "asc" ? "asc" : searchParams.get("sortDir") === "desc" ? "desc" : undefined,
+      sortDir:
+        searchParams.get("sortDir") === "asc"
+          ? "asc"
+          : searchParams.get("sortDir") === "desc"
+            ? "desc"
+            : undefined,
     });
     return NextResponse.json(result);
   } catch (error) {
@@ -31,7 +36,10 @@ export async function POST(request: Request) {
     if (error) return error;
     const parsed = createUserSchema.safeParse(await request.json());
     if (!parsed.success) {
-      return NextResponse.json({ error: "Name, email, password, and role are required." }, { status: 400 });
+      return NextResponse.json(
+        { error: "Name, email, password, and role are required." },
+        { status: 400 },
+      );
     }
     const passwordError = validatePassword(parsed.data.password);
     if (passwordError) {
@@ -54,19 +62,47 @@ export async function PATCH(request: Request) {
     if (!parsed.success) {
       return NextResponse.json({ error: "Invalid user update." }, { status: 400 });
     }
+    const data = parsed.data;
     const passwordOnly =
-      Boolean(parsed.data.password) &&
-      parsed.data.name === undefined &&
-      parsed.data.email === undefined &&
-      parsed.data.role === undefined &&
-      parsed.data.active === undefined &&
-      parsed.data.avatarUrl === undefined &&
-      parsed.data.permissionGrants === undefined &&
-      parsed.data.permissionRevokes === undefined;
+      Boolean(data.password) &&
+      data.name === undefined &&
+      data.email === undefined &&
+      data.role === undefined &&
+      data.active === undefined &&
+      data.avatarUrl === undefined &&
+      data.permissionGrants === undefined &&
+      data.permissionRevokes === undefined &&
+      data.allowedLocationIds === undefined;
+
+    const roleOnly =
+      data.role !== undefined &&
+      data.name === undefined &&
+      data.email === undefined &&
+      data.password === undefined &&
+      data.active === undefined &&
+      data.avatarUrl === undefined &&
+      data.permissionGrants === undefined &&
+      data.permissionRevokes === undefined &&
+      data.allowedLocationIds === undefined;
+
+    const activeOnly =
+      typeof data.active === "boolean" &&
+      data.name === undefined &&
+      data.email === undefined &&
+      data.password === undefined &&
+      data.role === undefined &&
+      data.avatarUrl === undefined &&
+      data.permissionGrants === undefined &&
+      data.permissionRevokes === undefined &&
+      data.allowedLocationIds === undefined;
 
     const auth = passwordOnly
       ? await requireUser()
-      : await requirePermission("users.edit");
+      : roleOnly
+        ? await requireAnyPermission(["users.assign_roles", "users.edit"])
+        : activeOnly
+          ? await requireAnyPermission(["users.deactivate", "users.edit"])
+          : await requirePermission("users.edit");
     if (auth.error) return auth.error;
     if (
       passwordOnly &&
@@ -78,7 +114,7 @@ export async function PATCH(request: Request) {
       );
     }
 
-    const result = await patchManagedUser(auth.user, parsed.data);
+    const result = await patchManagedUser(auth.user, data);
     if (!result.user) {
       return NextResponse.json({ error: result.error }, { status: result.status });
     }
