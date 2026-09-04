@@ -262,6 +262,14 @@ export function PosPanel({ locationId, onLocationChange }: Props) {
       .filter(Boolean) as TicketLineView[];
   }, [locationId, ticket]);
 
+  const ticketQtyByProduct = useMemo(() => {
+    const map = new Map<string, number>();
+    for (const line of ticket) {
+      map.set(line.productId, (map.get(line.productId) ?? 0) + line.quantity);
+    }
+    return map;
+  }, [ticket]);
+
   const subtotal = ticketLines.reduce((sum, line) => sum + line.lineTotal, 0);
   const discount = getCouponDiscount(coupon || null, subtotal);
   const shipping = location
@@ -558,14 +566,6 @@ export function PosPanel({ locationId, onLocationChange }: Props) {
       </div>
     </div>
   );
-
-  const ticketQtyByProduct = useMemo(() => {
-    const map = new Map<string, number>();
-    for (const line of ticket) {
-      map.set(line.productId, (map.get(line.productId) ?? 0) + line.quantity);
-    }
-    return map;
-  }, [ticket]);
 
   const productGrid = (columns: string) =>
     grouped.length === 0 ? (

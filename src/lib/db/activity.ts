@@ -133,12 +133,14 @@ export async function fetchActivityLogs(filters: {
     });
   }
   if (filters.q) {
+    // MySQL string columns use a case-insensitive collation, so `contains`
+    // already matches case-insensitively (Prisma has no `mode` on MySQL).
     andParts.push({
       OR: [
-        { summary: { contains: filters.q, mode: "insensitive" } },
-        { actorName: { contains: filters.q, mode: "insensitive" } },
-        { actorEmail: { contains: filters.q, mode: "insensitive" } },
-        { entityId: { contains: filters.q, mode: "insensitive" } },
+        { summary: { contains: filters.q } },
+        { actorName: { contains: filters.q } },
+        { actorEmail: { contains: filters.q } },
+        { entityId: { contains: filters.q } },
       ],
     });
   }
